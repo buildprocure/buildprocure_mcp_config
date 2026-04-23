@@ -81,9 +81,9 @@ jobs:
             cd $APP_DIR
 
             echo "Downloading latest docker-compose-mcp.yml..."
-            curl -f -H "Authorization: token $GH_PAT" \
-              https://raw.githubusercontent.com/buildprocure/buildprocure_mcp_config/main/deploy/docker-compose-mcp.yml \
-              -o docker-compose-mcp.yml
+            curl -fsSL \
+            https://raw.githubusercontent.com/buildprocure/buildprocure_mcp_config/main/deploy/docker-compose-mcp.yml \
+            -o docker-compose-mcp.yml
 
             echo "Downloaded compose file:"
             cat docker-compose-mcp.yml
