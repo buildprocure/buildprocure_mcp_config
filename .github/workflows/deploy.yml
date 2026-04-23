@@ -81,9 +81,12 @@ jobs:
             cd $APP_DIR
 
             echo "Downloading latest docker-compose-mcp.yml..."
-            curl -H "Authorization: token $GH_PAT" \
-              https://raw.githubusercontent.com/buildprocure/buildprocure-mcp/main/deploy/docker-compose-mcp.yml \
+            curl -f -H "Authorization: token $GH_PAT" \
+              https://raw.githubusercontent.com/buildprocure/buildprocure-mcp-config/main/deploy/docker-compose-mcp.yml \
               -o docker-compose-mcp.yml
+
+            echo "Downloaded compose file:"
+            cat docker-compose-mcp.yml
 
             if [ ! -f .env ]; then
               echo "Missing $APP_DIR/.env"
