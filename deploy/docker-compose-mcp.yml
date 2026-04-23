@@ -2,7 +2,7 @@ version: "3.9"
 
 services:
   buildprocure-mcp:
-    image: ghcr.io/buildprocure/buildprocure-mcp:latest
+    image: ghcr.io/buildprocure/buildprocure_mcp_config:latest
     container_name: buildprocure-mcp
     env_file:
       - .env
