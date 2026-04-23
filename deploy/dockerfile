@@ -1,0 +1,36 @@
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    APP_HOME=/app
+
+WORKDIR ${APP_HOME}
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    apache2 \
+    apache2-utils \
+    supervisor \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+# Apache config
+COPY deploy/apache/httpd.conf /etc/apache2/apache2.conf
+COPY deploy/apache/httpd-mcp.conf /etc/apache2/sites-available/000-default.conf
+
+# Supervisor config
+COPY deploy/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
+RUN a2enmod proxy proxy_http headers rewrite && \
+    mkdir -p /var/log/supervisor /var/run/apache2 /var/lock/apache2 && \
+    adduser --disabled-password --gecos "" appuser && \
+    chown -R appuser:appuser ${APP_HOME}
+
+EXPOSE 80
+
+CMD ["/usr/bin/supervisord", "-n", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

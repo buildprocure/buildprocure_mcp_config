@@ -1,0 +1,33 @@
+version: "3.9"
+
+services:
+  buildprocure-mcp:
+    image: ghcr.io/buildprocure/buildprocure-mcp:latest
+    container_name: buildprocure-mcp
+    env_file:
+      - .env
+    ports:
+      - "3011:80"
+    restart: always
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    external: true
+    name: html_app-network
+
+#local testing with docker compose, not used in production
+# version: "3.9"
+
+# services:
+#   buildprocure-mcp:
+#     build:
+#       context: ..
+#       dockerfile: deploy/dockerfile
+#     container_name: buildprocure-mcp
+#     env_file:
+#       - ../.env
+#     ports:
+#       - "3011:80"
+#     restart: unless-stopped

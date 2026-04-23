@@ -1,0 +1,17 @@
+# GitHub Configuration
+GITHUB_USER=buildprocure
+GITHUB_TOKEN=github_pat_xxxxxxxxxxxx
+GITHUB_API_URL=https://api.github.com
+
+# MCP Server Configuration
+MCP_SERVER_NAME=buildprocure-mcp
+MCP_SERVER_VERSION=1.0.0
+MCP_DEBUG=false
+
+# Repository Discovery
+AUTO_DISCOVER_REPOS=true
+REPO_DISCOVERY_INTERVAL=86400
+
+# Logging
+LOG_LEVEL=INFO
+LOG_FILE=./logs/mcp.log

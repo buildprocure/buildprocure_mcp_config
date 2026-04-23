@@ -1,0 +1,13 @@
+server:
+  name: buildprocure-mcp
+  version: 1.0.0
+  debug: false
+
+github:
+  user: buildprocure
+  api_version: v3
+
+tools:
+  - unified_workspace
+  - cross_repo_search
+  - dependency_analyzer

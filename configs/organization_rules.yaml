@@ -1,0 +1,25 @@
+rules:
+  - id: core-repos
+    repos: [bp-base, procurex]
+    priority: 1
+    tools: [unified-workspace, dependency-analyzer]
+  
+  - id: infrastructure
+    repos: [bp-docker-build]
+    priority: 2
+    tools: [unified-workspace, cross-repo-search]
+  
+  - id: backend-services
+    repos: [bp-simplesamlphp]
+    priority: 2
+    tools: [unified-workspace, cross-repo-search]
+  
+  - id: styling
+    repos: [bp-style-css]
+    priority: 3
+    tools: [unified-workspace]
+  
+  - id: other-projects
+    repos: [bp_mcp_config, buildhub]
+    priority: 4
+    tools: [unified-workspace]

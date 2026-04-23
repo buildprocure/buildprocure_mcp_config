@@ -1,0 +1,99 @@
+name: Build and Deploy MCP to GHCR
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+env:
+  IMAGE_NAME: ${{ github.event.repository.name }}
+  REGISTRY: ghcr.io
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Generate image variables
+        id: vars
+        run: |
+          APP_COMMIT_SHORT=$(echo "${GITHUB_SHA}" | cut -c1-9)
+          IMAGE_BASE="${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}"
+          echo "TAG=$APP_COMMIT_SHORT" >> $GITHUB_OUTPUT
+          echo "IMAGE_BASE=$IMAGE_BASE" >> $GITHUB_OUTPUT
+
+      - name: Login to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Debug structure
+        run: |
+          pwd
+          ls -la
+          ls -la deploy
+          ls -la deploy/apache
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            --no-cache \
+            -t ${{ steps.vars.outputs.IMAGE_BASE }}:${{ steps.vars.outputs.TAG }} \
+            -t ${{ steps.vars.outputs.IMAGE_BASE }}:latest \
+            -f deploy/dockerfile \
+            .
+
+      - name: Push Docker images
+        run: |
+          docker push ${{ steps.vars.outputs.IMAGE_BASE }}:${{ steps.vars.outputs.TAG }}
+          docker push ${{ steps.vars.outputs.IMAGE_BASE }}:latest
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            set -e
+
+            APP_DIR=/opt/buildprocure-mcp
+            mkdir -p $APP_DIR
+            cd $APP_DIR
+
+            echo "Downloading latest docker-compose-mcp.yml..."
+            curl -H "Authorization: token $GH_PAT" \
+              https://raw.githubusercontent.com/buildprocure/buildprocure-mcp/main/deploy/docker-compose-mcp.yml \
+              -o docker-compose-mcp.yml
+
+            if [ ! -f .env ]; then
+              echo "Missing $APP_DIR/.env"
+              exit 1
+            fi
+
+            echo "Logging into GHCR..."
+            echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
+
+            echo "Pulling latest image..."
+            docker compose -f docker-compose-mcp.yml pull
+
+            echo "Restarting MCP container..."
+            docker compose -f docker-compose-mcp.yml down --remove-orphans
+            docker compose -f docker-compose-mcp.yml up -d
+
+            echo "Cleaning old images..."
+            docker image prune -f
+
+            docker ps -a
