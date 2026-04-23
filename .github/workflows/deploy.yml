@@ -56,6 +56,7 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    environment: Server Secrets
 
     steps:
       - name: Check deploy secrets presence
@@ -63,7 +64,7 @@ jobs:
           [ -n "${{ secrets.SSH_HOST }}" ] && echo "SSH_HOST present" || echo "SSH_HOST missing"
           [ -n "${{ secrets.SSH_USER }}" ] && echo "SSH_USER present" || echo "SSH_USER missing"
           [ -n "${{ secrets.SSH_KEY }}" ] && echo "SSH_KEY present" || echo "SSH_KEY missing"
-          
+
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         env:
