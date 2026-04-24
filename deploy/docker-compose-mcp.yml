@@ -1,24 +1,24 @@
-services:
-  buildprocure-mcp:
-    image: ghcr.io/buildprocure/buildprocure_mcp_config:latest
-    container_name: buildprocure-mcp
-    env_file:
-      - .env
-    ports:
-      - "3011:80"
-    restart: always
-
-#local testing with docker compose, not used in production
-# version: "3.9"
-
 # services:
 #   buildprocure-mcp:
-#     build:
-#       context: ..
-#       dockerfile: deploy/dockerfile
+#     image: ghcr.io/buildprocure/buildprocure_mcp_config:latest
 #     container_name: buildprocure-mcp
 #     env_file:
-#       - ../.env
+#       - .env
 #     ports:
 #       - "3011:80"
-#     restart: unless-stopped
+#     restart: always
+
+# local testing with docker compose, not used in production
+# version: "3.9"
+
+services:
+  buildprocure-mcp:
+    build:
+      context: ..
+      dockerfile: deploy/dockerfile
+    container_name: buildprocure-mcp
+    env_file:
+      - ../.env
+    ports:
+      - "3011:80"
+    restart: unless-stopped

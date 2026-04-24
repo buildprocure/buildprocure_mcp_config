@@ -21,6 +21,7 @@ from tools.unified_workspace_tools import UnifiedWorkspaceTool
 from tools.cross_repo_search_tools import CrossRepoSearchTool
 from tools.dependency_analyzer_tools import DependencyAnalyzerTool
 from utils.config_manager import ConfigManager
+from tools.pr_review_tools import PRReviewTool
 
 load_dotenv()
 
@@ -43,6 +44,9 @@ class BuildProcureService:
         self.workspace_tool = UnifiedWorkspaceTool()
         self.search_tool = CrossRepoSearchTool()
         self.dep_tool = DependencyAnalyzerTool()
+
+        self.pr_review_tool = PRReviewTool()
+        logger.info("Loaded %s PR review tools", len(self.pr_review_tool.get_tools()))
 
         logger.info(
             "Loaded %s workspace tools",
@@ -97,6 +101,24 @@ async def health_check(request) -> tuple[dict[str, Any], int]:
         "service": service.name,
         "version": service.version,
     }, 200
+
+# Add PR review tools as MCP endpoints
+@mcp.tool()
+def list_open_pull_requests(repo_name: str) -> dict:
+    """List open pull requests for a repository."""
+    return service.pr_review_tool.list_open_pull_requests(repo_name)
+
+
+@mcp.tool()
+def get_pull_request_details(repo_name: str, pr_number: int) -> dict:
+    """Get pull request metadata, changed files, and summary context."""
+    return service.pr_review_tool.get_pull_request_details(repo_name, pr_number)
+
+
+@mcp.tool()
+def get_pr_review_context(repo_name: str, pr_number: int) -> dict:
+    """Collect PR diff and repository context for senior software engineer review.."""
+    return service.pr_review_tool.get_pr_review_context(repo_name, pr_number)
 
 if __name__ == "__main__":
     logger.info("Starting %s v%s", service.name, service.version)

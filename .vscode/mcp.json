@@ -1,15 +1,15 @@
-{
-  "servers": {
-    "buildprocure-dev": {
-      "url": "http://143.198.64.132:3011/mcp"
-    }
-  }
-}
-
 // {
 //   "servers": {
-//     "buildprocure-local-http": {
-//       "url": "http://localhost:3011/mcp"
+//     "buildprocure-dev": {
+//       "url": "http://143.198.64.132:3011/mcp"
 //     }
 //   }
 // }
+
+{
+  "servers": {
+    "buildprocure-local-http": {
+      "url": "http://localhost:3011/mcp"
+    }
+  }
+}

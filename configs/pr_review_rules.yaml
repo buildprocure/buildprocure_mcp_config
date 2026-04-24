@@ -1,0 +1,38 @@
+review_categories:
+  - correctness
+  - regressions
+  - security
+  - performance
+  - maintainability
+  - readability
+  - test_coverage
+  - logging_observability
+  - backward_compatibility
+
+severity_levels:
+  - blocker
+  - warning
+  - suggestion
+
+default_max_files: 100
+default_max_diff_chars: 120000
+
+language_hints:
+  php:
+    focus:
+      - null handling
+      - array index safety
+      - SQL injection
+      - output escaping
+      - session/auth checks
+  javascript:
+    focus:
+      - DOM safety
+      - async error handling
+      - event duplication
+      - performance
+  python:
+    focus:
+      - exception handling
+      - typing
+      - dependency safety
