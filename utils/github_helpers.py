@@ -6,6 +6,7 @@ Utilities for interacting with GitHub API
 import os
 import logging
 import requests
+import base64
 
 logger = logging.getLogger(__name__)
 
@@ -84,3 +85,62 @@ class GitHubHelper:
         response = requests.get(url, headers=headers, timeout=30)
         response.raise_for_status()
         return response.text
+    
+    def get_repo_file(self, repo_name: str, path: str, ref: str = "main") -> dict | None:
+        url = f"{self.api_url}/repos/{self.github_org}/{repo_name}/contents/{path}"
+
+        response = requests.get(
+            url,
+            headers=self.headers,
+            params={"ref": ref},
+            timeout=30,
+        )
+
+        if response.status_code == 404:
+            return None
+
+        response.raise_for_status()
+        data = response.json()
+
+        content = ""
+        if data.get("content"):
+            content = base64.b64decode(data["content"]).decode("utf-8", errors="replace")
+
+        return {
+            "path": path,
+            "exists": True,
+            "content": content,
+            "sha": data.get("sha"),
+            "html_url": data.get("html_url"),
+        }
+
+
+    def get_repo_tree(self, repo_name: str, ref: str = "main") -> list[str]:
+        branch_url = f"{self.api_url}/repos/{self.github_org}/{repo_name}/branches/{ref}"
+
+        branch_response = requests.get(
+            branch_url,
+            headers=self.headers,
+            timeout=30,
+        )
+        branch_response.raise_for_status()
+        branch = branch_response.json()
+
+        tree_sha = branch["commit"]["commit"]["tree"]["sha"]
+
+        tree_url = f"{self.api_url}/repos/{self.github_org}/{repo_name}/git/trees/{tree_sha}"
+
+        tree_response = requests.get(
+            tree_url,
+            headers=self.headers,
+            params={"recursive": "1"},
+            timeout=30,
+        )
+        tree_response.raise_for_status()
+        tree = tree_response.json()
+
+        return [
+            item["path"]
+            for item in tree.get("tree", [])
+            if item.get("type") == "blob"
+        ]
