@@ -5,6 +5,7 @@ from typing import Any
 
 from utils.github_helpers import GitHubHelper
 from utils.pr_review_helpers import PRReviewHelper
+from utils.azure_devops_helper import AzureDevOpsHelper
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +14,7 @@ class PRReviewTool:
     def __init__(self):
         self.github = GitHubHelper()
         self.helper = PRReviewHelper()
+        self.azure = AzureDevOpsHelper()
 
     def get_tools(self) -> list[dict[str, Any]]:
         return [
@@ -112,6 +114,17 @@ class PRReviewTool:
                 "html_url": file_data.get("html_url"),
                 "content": self.helper.trim_file_content(file_data.get("content", "")),
             }
+            azure_text_parts = [
+                pr.get("title") or "",
+                pr.get("body") or "",
+                pr.get("head", {}).get("ref") or "",
+            ]
+            for f in files:
+            azure_text_parts.append(f.get("filename", ""))
+            azure_text_parts.append(f.get("patch", "") or "")
+
+            azure_lookup_text = "\n".join(azure_text_parts)
+            azure_context = self.azure.get_context_for_text(azure_lookup_text)
 
         logger.info(
             "Prepared PR review context for %s PR #%s with %s context files",
@@ -137,6 +150,7 @@ class PRReviewTool:
                 "selected_context_files": list(context_files.keys()),
                 "files": context_files,
             },
+            "azure_devops_context": azure_context,
             "expected_review_output_format": {
                 "summary": "Short summary of what changed and intent.",
                 "senior_engineer_assessment": "Concise engineering judgment.",

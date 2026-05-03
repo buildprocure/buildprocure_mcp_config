@@ -17,6 +17,7 @@ from tools.cross_repo_search_tools import CrossRepoSearchTool
 from tools.dependency_analyzer_tools import DependencyAnalyzerTool
 from tools.pr_review_tools import PRReviewTool
 from utils.config_manager import ConfigManager
+from tools.azure_devops_tools import AzureDevOpsTool
 
 load_dotenv()
 
@@ -40,12 +41,14 @@ class BuildProcureService:
         self.search_tool = CrossRepoSearchTool()
         self.dep_tool = DependencyAnalyzerTool()
         self.pr_review_tool = PRReviewTool()
+        self.azure_devops_tool = AzureDevOpsTool()
+
 
         logger.info("Loaded %s workspace tools", len(self.workspace_tool.get_tools()))
         logger.info("Loaded %s search tools", len(self.search_tool.get_tools()))
         logger.info("Loaded %s dependency tools", len(self.dep_tool.get_tools()))
         logger.info("Loaded %s PR review tools", len(self.pr_review_tool.get_tools()))
-
+        logger.info("Loaded %s Azure DevOps tools", len(self.azure_devops_tool.get_tools()))
 
 service = BuildProcureService()
 mcp = FastMCP(service.name)
@@ -92,6 +95,22 @@ def get_pr_review_context(repo_name: str, pr_number: int) -> dict[str, Any]:
     """Collect PR diff and repository context for senior software engineer review."""
     return service.pr_review_tool.get_pr_review_context(repo_name, pr_number)
 
+@mcp.tool()
+def get_azure_work_item(work_item_id: int) -> dict[str, Any]:
+    """Get Azure Boards work item details by ID."""
+    return service.azure_devops_tool.get_azure_work_item(work_item_id)
+
+
+@mcp.tool()
+def get_azure_context_for_text(text: str) -> dict[str, Any]:
+    """Extract Azure ticket IDs from text and fetch ticket/wiki context."""
+    return service.azure_devops_tool.get_azure_context_for_text(text)
+
+
+@mcp.tool()
+def get_azure_wiki_page(path: str) -> dict[str, Any] | None:
+    """Get Azure DevOps wiki page content by path."""
+    return service.azure_devops_tool.get_azure_wiki_page(path)
 
 @mcp.custom_route("/health", methods=["GET"])
 async def health_check(request: Request) -> JSONResponse:
@@ -161,6 +180,12 @@ Use only the evidence provided below:
 - changed files
 - diff patches
 - repository context files collected by MCP
+
+Also use azure_devops_context when available:
+- Compare PR changes to Azure Boards title, description, acceptance criteria, and state.
+- If PR does not appear to satisfy acceptance criteria, call it out.
+- Use wiki pages as organizational standards/process context.
+- Do not invent ticket requirements beyond Azure context.
 
 Rules:
 1. Do not give generic comments.
@@ -240,86 +265,6 @@ MCP review context:
         raise RuntimeError(f"No review text returned from OpenAI: {data}")
 
     return review
-
-def build_agent_review_markdown(context: dict[str, Any]) -> str:
-    pr = context.get("pull_request", {})
-    repo_context = context.get("repository_context", {})
-    pr_type = context.get("pr_type", {})
-
-    changed_files = pr.get("changed_files", [])
-    selected_context_files = repo_context.get("selected_context_files", [])
-    context_files = repo_context.get("files", {})
-
-    changed_files_text = "\n".join(
-        f"- `{f.get('filename')}` ({f.get('status')}, +{f.get('additions')}/-{f.get('deletions')})"
-        for f in changed_files
-    ) or "- None"
-
-    context_files_text = "\n".join(f"- `{path}`" for path in selected_context_files) or "- None"
-
-    context_summary = build_context_summary(context_files)
-
-    reviewer_prompt = fprompt = f"""
-You are a senior software engineer reviewing a BuildProcure pull request.
-
-Your review must be polite, practical, and human-sounding.
-Do not sound like a bot.
-Do not give generic comments.
-Only comment when you have a specific, evidence-based improvement.
-
-Use only this MCP context:
-{json.dumps(context, indent=2)}
-
-Review rules:
-1. Every finding must reference a file name.
-2. Include the line number when available from the diff/patch.
-3. For each requested change, provide:
-   - File name and line number
-   - Code to remove
-   - Code to add
-   - Reason for the change
-4. Do not invent line numbers.
-5. If exact line number is unavailable, say "line: from diff context".
-6. Do not request changes for style preferences unless it affects maintainability, correctness, security, or readability.
-7. For documentation-only PRs, focus on accuracy and clarity.
-8. For code PRs, focus on bugs, regressions, edge cases, security, tests, and maintainability.
-9. If the PR looks fine, say so briefly and do not force comments.
-
-Return markdown in this exact format:
-
-## Review Summary
-Short human summary of what changed.
-
-## Suggested Changes
-
-### 1. <Short title>
-**File:** `<file path>`  
-**Line:** `<line number or "from diff context">`
-
-**Code to remove:**
-```<language>
-<exact code to remove>```
----
-Triggered by `/agent-review`.
-""".strip()
-
-
-def build_context_summary(context_files: dict[str, Any]) -> str:
-    if not context_files:
-        return "### Repository Context Summary\nNo additional repository context files were loaded."
-
-    lines = ["### Repository Context Summary"]
-
-    for path, file_data in context_files.items():
-        content = file_data.get("content", "") or ""
-        preview = content.strip().replace("\n", " ")[:500]
-
-        lines.append(f"- `{path}`: {len(content)} chars loaded")
-        if preview:
-            lines.append(f"  - Preview: {preview}")
-
-    return "\n".join(lines)
-
 
 if __name__ == "__main__":
     logger.info("Starting %s v%s", service.name, service.version)
