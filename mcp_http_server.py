@@ -259,47 +259,46 @@ def build_agent_review_markdown(context: dict[str, Any]) -> str:
 
     context_summary = build_context_summary(context_files)
 
-    reviewer_prompt = f"""
-### Senior Engineer Review Prompt
+    reviewer_prompt = fprompt = f"""
+You are a senior software engineer reviewing a BuildProcure pull request.
 
-Please review this PR as a senior software engineer using the MCP-collected context below.
+Your review must be polite, practical, and human-sounding.
+Do not sound like a bot.
+Do not give generic comments.
+Only comment when you have a specific, evidence-based improvement.
 
-Focus on:
-- correctness and regression risk
-- security concerns
-- maintainability/readability
-- edge cases
-- test impact only when relevant
-- deployment/config impact only when relevant
-- documentation accuracy if docs changed
+Use only this MCP context:
+{json.dumps(context, indent=2)}
 
-Rules:
-- Do not give generic comments.
-- Base findings only on PR diff and repository context.
-- If context is insufficient, say exactly what could not be verified.
-"""
+Review rules:
+1. Every finding must reference a file name.
+2. Include the line number when available from the diff/patch.
+3. For each requested change, provide:
+   - File name and line number
+   - Code to remove
+   - Code to add
+   - Reason for the change
+4. Do not invent line numbers.
+5. If exact line number is unavailable, say "line: from diff context".
+6. Do not request changes for style preferences unless it affects maintainability, correctness, security, or readability.
+7. For documentation-only PRs, focus on accuracy and clarity.
+8. For code PRs, focus on bugs, regressions, edge cases, security, tests, and maintainability.
+9. If the PR looks fine, say so briefly and do not force comments.
 
-    return f"""
-## 🤖 BuildProcure Agent Review Context
+Return markdown in this exact format:
 
-### Summary
-PR #{context.get("pr_number")} in `{context.get("repo_name")}` was analyzed by the BuildProcure MCP server.
+## Review Summary
+Short human summary of what changed.
 
-**Detected PR type:** `{pr_type.get("type")}`
+## Suggested Changes
 
-### Changed Files
-{changed_files_text}
+### 1. <Short title>
+**File:** `<file path>`  
+**Line:** `<line number or "from diff context">`
 
-### Repository Context Used
-{context_files_text}
-
-{context_summary}
-
-{reviewer_prompt}
-
-### Next Step
-Use this MCP context to complete the final review. If this is running from GitHub Actions without an LLM, this comment is the review context package. If using Copilot/ChatGPT, ask it to produce the final senior-engineer review from this context.
-
+**Code to remove:**
+```<language>
+<exact code to remove>```
 ---
 Triggered by `/agent-review`.
 """.strip()

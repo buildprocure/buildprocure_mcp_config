@@ -73,6 +73,9 @@ class PRReviewTool:
                     "additions": f.get("additions"),
                     "deletions": f.get("deletions"),
                     "changes": f.get("changes"),
+                    "patch": f.get("patch", "")[:20_000],
+                    "raw_url": f.get("raw_url"),
+                    "blob_url": f.get("blob_url"),
                 }
                 for f in files
             ],
