@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import logging
 import os
+import json
+import requests
 from typing import Any
 
 from dotenv import load_dotenv
@@ -124,7 +126,7 @@ async def agent_review_endpoint(request: Request) -> JSONResponse:
             pr_number=int(pr_number),
         )
 
-        review_markdown = build_agent_review_markdown(context)
+        review_markdown = call_openai_pr_reviewer(context)
 
         return JSONResponse(
             {
@@ -141,6 +143,103 @@ async def agent_review_endpoint(request: Request) -> JSONResponse:
         logger.exception("Agent review failed")
         return JSONResponse({"error": str(exc)}, status_code=500)
 
+#call OpenAI LLM to produce final Senior Engineer review from MCP context. 
+def call_openai_pr_reviewer(context: dict[str, Any]) -> str:
+    api_key = os.getenv("OPENAI_API_KEY")
+    model = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
+
+    if not api_key:
+        raise RuntimeError("OPENAI_API_KEY is missing on MCP server")
+
+    prompt = f"""
+You are the BuildProcure Senior PR Review Agent.
+
+Review this pull request like a senior software engineer.
+
+Use only the evidence provided below:
+- PR metadata
+- changed files
+- diff patches
+- repository context files collected by MCP
+
+Rules:
+1. Do not give generic comments.
+2. Do not invent issues.
+3. Every warning/blocker must be grounded in the diff or repo context.
+4. For documentation-only PRs, check accuracy against repo files. Do not request tests unless executable commands/examples changed.
+5. For code PRs, focus on correctness, regressions, edge cases, security, maintainability, and test impact.
+6. For deployment/config PRs, check ports, image names, env files, secrets, networks, rollback impact.
+7. If context is insufficient, say exactly what could not be verified.
+
+Return markdown in this exact format:
+
+## 🤖 BuildProcure Agent Review
+
+### Summary
+...
+
+### Senior Engineer Assessment
+...
+
+### Blockers
+- None, or specific blockers
+
+### Warnings
+- None, or specific warnings
+
+### Suggestions
+- None, or specific suggestions
+
+### Test Review
+...
+
+### Documentation Review
+...
+
+### Deployment / Config Impact
+...
+
+### Suggested Reviewer Comments
+- ...
+
+### Approval Recommendation
+Approve | Approve with comments | Request changes
+
+MCP review context:
+{json.dumps(context, indent=2)}
+"""
+
+    response = requests.post(
+        "https://api.openai.com/v1/responses",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": model,
+            "input": prompt,
+        },
+        timeout=120,
+    )
+
+    if response.status_code >= 400:
+        logger.error("OpenAI error: %s", response.text)
+
+    response.raise_for_status()
+    data = response.json()
+
+    text_parts = []
+    for item in data.get("output", []):
+        for content in item.get("content", []):
+            if content.get("type") == "output_text":
+                text_parts.append(content.get("text", ""))
+
+    review = "\n".join(text_parts).strip()
+
+    if not review:
+        raise RuntimeError(f"No review text returned from OpenAI: {data}")
+
+    return review
 
 def build_agent_review_markdown(context: dict[str, Any]) -> str:
     pr = context.get("pull_request", {})
