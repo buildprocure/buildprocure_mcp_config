@@ -120,8 +120,8 @@ class PRReviewTool:
                 pr.get("head", {}).get("ref") or "",
             ]
             for f in files:
-            azure_text_parts.append(f.get("filename", ""))
-            azure_text_parts.append(f.get("patch", "") or "")
+                azure_text_parts.append(f.get("filename", ""))
+                azure_text_parts.append(f.get("patch", "") or "")
 
             azure_lookup_text = "\n".join(azure_text_parts)
             azure_context = self.azure.get_context_for_text(azure_lookup_text)
