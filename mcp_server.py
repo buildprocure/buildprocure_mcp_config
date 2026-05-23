@@ -1,24 +1,33 @@
 #!/usr/bin/env python3
 """
 BuildProcure MCP Server
-Main entry point for the Model Context Protocol server
+Main entry point for the reusable basic Model Context Protocol tools.
 """
+
+from __future__ import annotations
 
 import logging
 import os
+from typing import Any
+
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
 
-from tools.unified_workspace_tools import UnifiedWorkspaceTool
+from tools.agent_context_tools import AgentContextTool
+from tools.config_tools import ConfigTool
 from tools.cross_repo_search_tools import CrossRepoSearchTool
 from tools.dependency_analyzer_tools import DependencyAnalyzerTool
+from tools.repository_content_tools import RepositoryContentTool
+from tools.unified_workspace_tools import UnifiedWorkspaceTool
 from utils.config_manager import ConfigManager
+from utils.github_helpers import GitHubHelper
+from utils.repo_discovery import RepositoryDiscovery
 
 load_dotenv()
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 
@@ -26,45 +35,122 @@ mcp = FastMCP("buildprocure-mcp")
 
 
 class BuildProcureService:
-    def __init__(self):
-        self.name = "buildprocure-mcp"
-        self.version = "1.0.0"
+    def __init__(self) -> None:
+        self.name = os.getenv("MCP_SERVER_NAME", "buildprocure-mcp")
+        self.version = os.getenv("MCP_SERVER_VERSION", "1.0.0")
         self.config = ConfigManager()
+        self.github = GitHubHelper()
+        self.discovery = RepositoryDiscovery(github=self.github, config=self.config)
 
-        self.workspace_tool = UnifiedWorkspaceTool()
-        self.search_tool = CrossRepoSearchTool()
-        self.dep_tool = DependencyAnalyzerTool()
+        self.workspace_tool = UnifiedWorkspaceTool(discovery=self.discovery)
+        self.content_tool = RepositoryContentTool(github=self.github)
+        self.search_tool = CrossRepoSearchTool(github=self.github, discovery=self.discovery)
+        self.dep_tool = DependencyAnalyzerTool(github=self.github)
+        self.config_tool = ConfigTool(config=self.config)
+        self.agent_context_tool = AgentContextTool(
+            github=self.github,
+            config=self.config,
+            content_tool=self.content_tool,
+            dependency_tool=self.dep_tool,
+        )
 
-        logger.info("Initializing MCP tools...")
-        logger.info(f"Loaded {len(self.workspace_tool.get_tools())} workspace tools")
-        logger.info(f"Loaded {len(self.search_tool.get_tools())} search tools")
-        logger.info(f"Loaded {len(self.dep_tool.get_tools())} dependency tools")
+        logger.info("Initializing basic MCP tools...")
+        for tool_group in [
+            self.workspace_tool,
+            self.content_tool,
+            self.search_tool,
+            self.dep_tool,
+            self.config_tool,
+            self.agent_context_tool,
+        ]:
+            logger.info("Loaded %s tools from %s", len(tool_group.get_tools()), tool_group.__class__.__name__)
 
 
 service = BuildProcureService()
 
 
 @mcp.tool()
-def list_all_repos() -> dict:
-    """List all active BuildProcure repositories."""
-    return service.workspace_tool.list_all_repos()
+def list_all_repos(include_archived: bool = False) -> dict[str, Any]:
+    """List BuildProcure repositories that match discovery policy."""
+    return service.workspace_tool.list_all_repos(include_archived=include_archived)
 
 
 @mcp.tool()
-def get_repo_info(repo_name: str) -> dict:
-    """Get detailed information about a BuildProcure repository."""
+def get_repo_info(repo_name: str) -> dict[str, Any]:
+    """Get normalized information about a BuildProcure repository."""
     return service.workspace_tool.get_repo_info(repo_name)
 
-@mcp.tool()
-def search_across_repos(query: str) -> dict:
-    """Search for patterns across all BuildProcure repositories."""
-    return service.search_tool.search_across_repos(query)
 
 @mcp.tool()
-def analyze_dependencies(repo_name: str) -> dict:
-    """Analyze dependencies for a BuildProcure repository."""
-    return service.dep_tool.analyze_dependencies(repo_name)
+def get_repo_tree(repo_name: str, target_ref: str = "main") -> dict[str, Any]:
+    """Get a repository file tree for a branch, tag, or commit ref."""
+    return service.content_tool.get_repo_tree(repo_name, target_ref=target_ref)
+
+
+@mcp.tool()
+def get_repo_file(repo_name: str, path: str, target_ref: str = "main") -> dict[str, Any]:
+    """Get one repository file by path and ref."""
+    return service.content_tool.get_repo_file(repo_name, path, target_ref=target_ref)
+
+
+@mcp.tool()
+def get_repo_files_batch(repo_name: str, paths: list[str], target_ref: str = "main") -> dict[str, Any]:
+    """Get multiple repository files by path and ref."""
+    return service.content_tool.get_repo_files_batch(repo_name, paths, target_ref=target_ref)
+
+
+@mcp.tool()
+def get_repo_manifest_summary(repo_name: str, target_ref: str = "main") -> dict[str, Any]:
+    """Detect repository manifests, stack hints, scripts, tests, and deployment hints."""
+    return service.dep_tool.get_repo_manifest_summary(repo_name, target_ref=target_ref)
+
+
+@mcp.tool()
+def analyze_dependencies(repo_name: str, target_ref: str = "main") -> dict[str, Any]:
+    """Alias for get_repo_manifest_summary."""
+    return service.dep_tool.analyze_dependencies(repo_name, target_ref=target_ref)
+
+
+@mcp.tool()
+def search_across_repos(
+    query: str,
+    include_archived: bool = False,
+    max_results: int = 50,
+) -> dict[str, Any]:
+    """Search across policy-matching repositories and return bounded snippets."""
+    return service.search_tool.search_across_repos(
+        query,
+        include_archived=include_archived,
+        max_results=max_results,
+    )
+
+
+@mcp.tool()
+def list_available_configs() -> dict[str, Any]:
+    """List available YAML configs and readable load errors."""
+    return service.config_tool.list_available_configs()
+
+
+@mcp.tool()
+def get_config(config_name: str) -> dict[str, Any]:
+    """Get one loaded config by name."""
+    return service.config_tool.get_config(config_name)
+
+
+@mcp.tool()
+def build_agent_context(
+    repo_name: str,
+    target_ref: str = "main",
+    paths: list[str] | None = None,
+) -> dict[str, Any]:
+    """Build generic reusable repository context for future agents."""
+    return service.agent_context_tool.build_agent_context(
+        repo_name,
+        target_ref=target_ref,
+        paths=paths,
+    )
+
 
 if __name__ == "__main__":
-    logger.info(f"Starting {service.name} v{service.version}")
+    logger.info("Starting %s v%s", service.name, service.version)
     mcp.run()
