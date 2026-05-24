@@ -40,6 +40,7 @@ class FakeGitHub:
         self.repos = [
             _repo("bp-base"),
             _repo("procurex"),
+            _repo("buildprocure_mcp_config"),
             _repo("random-repo"),
             _repo("bp-archived", archived=True),
             _repo("bp-fork", fork=True),
@@ -109,11 +110,17 @@ class FakeGitHub:
         return {"ok": True, "files": files, "errors": errors, "target_ref": ref}
 
 
+class EmptyPackageGitHub(FakeGitHub):
+    def __init__(self) -> None:
+        super().__init__()
+        self.files["package.json"] = ""
+
+
 def _config_manager(tmp_path: Path) -> ConfigManager:
     config_dir = tmp_path / "configs"
     config_dir.mkdir()
     (config_dir / "repo_discovery_policy.yaml").write_text(
-        "filters:\n  exclude_archived: true\n  exclude_forks: true\nnaming_patterns:\n  - 'bp-*'\n  - 'procurex'\n",
+        "filters:\n  exclude_archived: true\n  exclude_forks: true\nnaming_patterns:\n  - 'bp-*'\n  - 'procurex'\n  - 'buildprocure_*'\n",
         encoding="utf-8",
     )
     (config_dir / "organization_rules.yaml").write_text("rules: []\n", encoding="utf-8")
@@ -150,7 +157,7 @@ def test_repo_discovery_respects_policy(tmp_path: Path):
     repos = discovery.get_active_repos()
     names = [repo["name"] for repo in repos]
 
-    assert names == ["bp-base", "procurex"]
+    assert names == ["bp-base", "procurex", "buildprocure_mcp_config"]
 
     all_names = [repo["name"] for repo in discovery.get_all_repos(include_archived=True)]
     assert "bp-archived" in all_names
@@ -170,6 +177,16 @@ def test_manifest_detection_for_common_stacks():
     assert "node" in summary["stack_summary"]["runtime_hints"]
     assert "python" in summary["stack_summary"]["runtime_hints"]
     assert "docker" in summary["stack_summary"]["deployment_hints"]
+
+
+def test_empty_package_json_does_not_imply_node_stack():
+    summary = DependencyAnalyzerTool(github=EmptyPackageGitHub()).get_repo_manifest_summary("buildprocure_mcp_config")
+
+    package_manifest = next(manifest for manifest in summary["manifests"] if manifest["path"] == "package.json")
+    assert package_manifest["has_node_signals"] is False
+    assert "node" not in summary["stack_summary"]["runtime_hints"]
+    assert "npm" not in summary["stack_summary"]["package_managers"]
+    assert "python" in summary["stack_summary"]["runtime_hints"]
 
 
 def test_search_across_repos_returns_snippets(tmp_path: Path):
