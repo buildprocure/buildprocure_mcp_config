@@ -21,6 +21,15 @@ MYSQL_PASSWORD=change_me
 MYSQL_DATABASE=buildprocure
 MYSQL_CONNECT_TIMEOUT=10
 
+# PR Agent Review Endpoint
+LLM_PROVIDER=openai
+LLM_REVIEW_TIMEOUT=120
+OPENAI_API_KEY=sk_xxxxxxxxxxxx
+OPENAI_MODEL=gpt-4.1-mini
+# ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxx
+# ANTHROPIC_MODEL=claude-3-5-sonnet-latest
+# ANTHROPIC_MAX_TOKENS=4000
+
 # Logging
 LOG_LEVEL=INFO
 LOG_FILE=./logs/mcp.log
