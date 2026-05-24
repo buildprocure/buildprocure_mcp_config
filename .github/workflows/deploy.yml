@@ -80,9 +80,10 @@ jobs:
             mkdir -p $APP_DIR
             cd $APP_DIR
 
-            echo "Downloading docker-compose-mcp.yml from deployed commit ${GITHUB_SHA}..."
+            DEPLOY_SHA="${{ github.sha }}"
+            echo "Downloading docker-compose-mcp.yml from deployed commit ${DEPLOY_SHA}..."
             curl -fsSL \
-            https://raw.githubusercontent.com/buildprocure/buildprocure_mcp_config/${GITHUB_SHA}/deploy/docker-compose-mcp.yml \
+            https://raw.githubusercontent.com/buildprocure/buildprocure_mcp_config/${DEPLOY_SHA}/deploy/docker-compose-mcp.yml \
             -o docker-compose-mcp.yml
 
             echo "Downloaded compose file:"
