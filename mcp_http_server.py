@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from typing import Any
 
 from dotenv import load_dotenv
@@ -21,10 +22,12 @@ from tools.config_tools import ConfigTool
 from tools.cross_repo_search_tools import CrossRepoSearchTool
 from tools.database_schema_tools import DatabaseSchemaTool
 from tools.dependency_analyzer_tools import DependencyAnalyzerTool
+from tools.pr_review_tools import PRReviewTool
 from tools.repository_content_tools import RepositoryContentTool
 from tools.unified_workspace_tools import UnifiedWorkspaceTool
 from utils.config_manager import ConfigManager
 from utils.github_helpers import GitHubHelper
+from utils.llm_review_provider import LLMReviewProvider
 from utils.repo_discovery import RepositoryDiscovery
 
 load_dotenv()
@@ -44,6 +47,7 @@ class BuildProcureService:
         self.config = ConfigManager()
         self.github = GitHubHelper()
         self.discovery = RepositoryDiscovery(github=self.github, config=self.config)
+        self.review_provider = LLMReviewProvider()
 
         logger.info("Initializing basic MCP tools...")
 
@@ -65,6 +69,11 @@ class BuildProcureService:
             content_tool=self.content_tool,
             database_schema_tool=self.database_schema_tool,
         )
+        self.pr_review_tool = PRReviewTool(
+            github=self.github,
+            agent_context_tool=self.agent_context_tool,
+            database_schema_tool=self.database_schema_tool,
+        )
 
         for tool_group in [
             self.workspace_tool,
@@ -75,6 +84,7 @@ class BuildProcureService:
             self.database_schema_tool,
             self.agent_context_tool,
             self.architecture_agent_tool,
+            self.pr_review_tool,
         ]:
             logger.info("Loaded %s tools from %s", len(tool_group.get_tools()), tool_group.__class__.__name__)
 
@@ -218,6 +228,32 @@ def build_architecture_analysis(
     )
 
 
+@mcp.tool()
+def list_open_pull_requests(repo_name: str) -> dict[str, Any]:
+    """List open pull requests for a repository."""
+    return service.pr_review_tool.list_open_pull_requests(repo_name)
+
+
+@mcp.tool()
+def get_pull_request_details(repo_name: str, pr_number: int) -> dict[str, Any]:
+    """Get pull request metadata and changed files."""
+    return service.pr_review_tool.get_pull_request_details(repo_name, pr_number)
+
+
+@mcp.tool()
+def get_pr_review_context(
+    repo_name: str,
+    pr_number: int,
+    include_database_schema: bool = True,
+) -> dict[str, Any]:
+    """Collect PR, repo, Azure, and database context for evidence-based review."""
+    return service.pr_review_tool.get_pr_review_context(
+        repo_name,
+        pr_number,
+        include_database_schema=include_database_schema,
+    )
+
+
 @mcp.custom_route("/health", methods=["GET"])
 async def health_check(request: Request) -> JSONResponse:
     return JSONResponse(
@@ -228,6 +264,88 @@ async def health_check(request: Request) -> JSONResponse:
             "tooling": "basic-foundation",
         }
     )
+
+
+@mcp.custom_route("/agent-review", methods=["POST"])
+async def agent_review_endpoint(request: Request) -> JSONResponse:
+    started_at = time.time()
+    try:
+        payload = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
+
+    repo_name = payload.get("repo_name")
+    pr_number = payload.get("pr_number")
+    include_database_schema = payload.get("include_database_schema", True)
+
+    if not repo_name or pr_number is None:
+        return JSONResponse(
+            {"ok": False, "error": "repo_name and pr_number are required"},
+            status_code=400,
+        )
+
+    try:
+        pr_number = int(pr_number)
+    except (TypeError, ValueError):
+        return JSONResponse({"ok": False, "error": "pr_number must be an integer"}, status_code=400)
+
+    context = service.pr_review_tool.get_pr_review_context(
+        repo_name=str(repo_name),
+        pr_number=pr_number,
+        include_database_schema=bool(include_database_schema),
+    )
+    if not context.get("ok"):
+        return JSONResponse(
+            {
+                "ok": False,
+                "repo_name": repo_name,
+                "pr_number": pr_number,
+                "error": context.get("error", "Unable to collect PR review context"),
+                "context": context,
+            },
+            status_code=502,
+        )
+
+    try:
+        review = service.review_provider.generate_pr_review(context)
+    except Exception as exc:
+        logger.exception("Agent review generation failed")
+        return JSONResponse(
+            {
+                "ok": False,
+                "repo_name": repo_name,
+                "pr_number": pr_number,
+                "error": str(exc),
+                "context_used": _summarize_context_used(context),
+            },
+            status_code=502,
+        )
+
+    return JSONResponse(
+        {
+            "ok": True,
+            "repo_name": repo_name,
+            "pr_number": pr_number,
+            "provider": review["provider"],
+            "model": review["model"],
+            "review_markdown": review["review_markdown"],
+            "context_used": _summarize_context_used(context),
+            "elapsed_seconds": round(time.time() - started_at, 2),
+        }
+    )
+
+
+def _summarize_context_used(context: dict[str, Any]) -> dict[str, Any]:
+    repository_context = context.get("repository_context", {})
+    azure_context = context.get("azure_devops_context", {})
+    database_context = context.get("database_schema_context", {})
+    return {
+        "selected_context_files": repository_context.get("selected_context_files", []),
+        "azure_work_item_ids": azure_context.get("work_item_ids", []),
+        "azure_wiki_page_count": len(azure_context.get("wiki_pages", [])),
+        "database_schema_enabled": database_context.get("enabled", False),
+        "database_matched_table_names": database_context.get("matched_table_names", []),
+    }
 
 
 if __name__ == "__main__":

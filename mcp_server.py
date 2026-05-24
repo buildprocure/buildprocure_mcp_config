@@ -19,6 +19,7 @@ from tools.config_tools import ConfigTool
 from tools.cross_repo_search_tools import CrossRepoSearchTool
 from tools.database_schema_tools import DatabaseSchemaTool
 from tools.dependency_analyzer_tools import DependencyAnalyzerTool
+from tools.pr_review_tools import PRReviewTool
 from tools.repository_content_tools import RepositoryContentTool
 from tools.unified_workspace_tools import UnifiedWorkspaceTool
 from utils.config_manager import ConfigManager
@@ -62,6 +63,11 @@ class BuildProcureService:
             content_tool=self.content_tool,
             database_schema_tool=self.database_schema_tool,
         )
+        self.pr_review_tool = PRReviewTool(
+            github=self.github,
+            agent_context_tool=self.agent_context_tool,
+            database_schema_tool=self.database_schema_tool,
+        )
 
         logger.info("Initializing basic MCP tools...")
         for tool_group in [
@@ -73,6 +79,7 @@ class BuildProcureService:
             self.database_schema_tool,
             self.agent_context_tool,
             self.architecture_agent_tool,
+            self.pr_review_tool,
         ]:
             logger.info("Loaded %s tools from %s", len(tool_group.get_tools()), tool_group.__class__.__name__)
 
@@ -211,6 +218,32 @@ def build_architecture_analysis(
         target_ref=target_ref,
         module_path=module_path,
         work_item_id=work_item_id,
+        include_database_schema=include_database_schema,
+    )
+
+
+@mcp.tool()
+def list_open_pull_requests(repo_name: str) -> dict[str, Any]:
+    """List open pull requests for a repository."""
+    return service.pr_review_tool.list_open_pull_requests(repo_name)
+
+
+@mcp.tool()
+def get_pull_request_details(repo_name: str, pr_number: int) -> dict[str, Any]:
+    """Get pull request metadata and changed files."""
+    return service.pr_review_tool.get_pull_request_details(repo_name, pr_number)
+
+
+@mcp.tool()
+def get_pr_review_context(
+    repo_name: str,
+    pr_number: int,
+    include_database_schema: bool = True,
+) -> dict[str, Any]:
+    """Collect PR, repo, Azure, and database context for evidence-based review."""
+    return service.pr_review_tool.get_pr_review_context(
+        repo_name,
+        pr_number,
         include_database_schema=include_database_schema,
     )
 
