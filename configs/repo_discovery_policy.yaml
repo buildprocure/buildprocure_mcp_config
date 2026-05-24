@@ -2,14 +2,16 @@ discovery:
   enabled: true
   interval: 86400  # 24 hours
   auto_register: true
-  
+
 filters:
   exclude_archived: true
   exclude_forks: true
-  
+
 naming_patterns:
   - "bp-*"
   - "bp_*"
   - "procurex"
   - "*-bp"
   - "buildprocure-*"
+  - "buildprocure_*"
+  - "buildprocure_mcp_config"

@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
+"""
+BuildProcure MCP HTTP Server
+Streamable HTTP entry point for reusable basic MCP tools.
+"""
+
 from __future__ import annotations
 
 import logging
 import os
-import json
-import requests
 from typing import Any
 
 from dotenv import load_dotenv
@@ -12,12 +15,15 @@ from mcp.server.fastmcp import FastMCP
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from tools.unified_workspace_tools import UnifiedWorkspaceTool
+from tools.agent_context_tools import AgentContextTool
+from tools.config_tools import ConfigTool
 from tools.cross_repo_search_tools import CrossRepoSearchTool
 from tools.dependency_analyzer_tools import DependencyAnalyzerTool
-from tools.pr_review_tools import PRReviewTool
+from tools.repository_content_tools import RepositoryContentTool
+from tools.unified_workspace_tools import UnifiedWorkspaceTool
 from utils.config_manager import ConfigManager
-from tools.azure_devops_tools import AzureDevOpsTool
+from utils.github_helpers import GitHubHelper
+from utils.repo_discovery import RepositoryDiscovery
 
 load_dotenv()
 
@@ -34,83 +40,119 @@ class BuildProcureService:
         self.name = os.getenv("MCP_SERVER_NAME", "buildprocure-mcp")
         self.version = os.getenv("MCP_SERVER_VERSION", "1.0.0")
         self.config = ConfigManager()
+        self.github = GitHubHelper()
+        self.discovery = RepositoryDiscovery(github=self.github, config=self.config)
 
-        logger.info("Initializing MCP tools...")
+        logger.info("Initializing basic MCP tools...")
 
-        self.workspace_tool = UnifiedWorkspaceTool()
-        self.search_tool = CrossRepoSearchTool()
-        self.dep_tool = DependencyAnalyzerTool()
-        self.pr_review_tool = PRReviewTool()
-        self.azure_devops_tool = AzureDevOpsTool()
+        self.workspace_tool = UnifiedWorkspaceTool(discovery=self.discovery)
+        self.content_tool = RepositoryContentTool(github=self.github)
+        self.search_tool = CrossRepoSearchTool(github=self.github, discovery=self.discovery)
+        self.dep_tool = DependencyAnalyzerTool(github=self.github)
+        self.config_tool = ConfigTool(config=self.config)
+        self.agent_context_tool = AgentContextTool(
+            github=self.github,
+            config=self.config,
+            content_tool=self.content_tool,
+            dependency_tool=self.dep_tool,
+        )
 
+        for tool_group in [
+            self.workspace_tool,
+            self.content_tool,
+            self.search_tool,
+            self.dep_tool,
+            self.config_tool,
+            self.agent_context_tool,
+        ]:
+            logger.info("Loaded %s tools from %s", len(tool_group.get_tools()), tool_group.__class__.__name__)
 
-        logger.info("Loaded %s workspace tools", len(self.workspace_tool.get_tools()))
-        logger.info("Loaded %s search tools", len(self.search_tool.get_tools()))
-        logger.info("Loaded %s dependency tools", len(self.dep_tool.get_tools()))
-        logger.info("Loaded %s PR review tools", len(self.pr_review_tool.get_tools()))
-        logger.info("Loaded %s Azure DevOps tools", len(self.azure_devops_tool.get_tools()))
 
 service = BuildProcureService()
 mcp = FastMCP(service.name)
 
 
 @mcp.tool()
-def list_all_repos() -> dict[str, Any]:
-    """List all active BuildProcure repositories."""
-    return service.workspace_tool.list_all_repos()
+def list_all_repos(include_archived: bool = False) -> dict[str, Any]:
+    """List BuildProcure repositories that match discovery policy."""
+    return service.workspace_tool.list_all_repos(include_archived=include_archived)
 
 
 @mcp.tool()
 def get_repo_info(repo_name: str) -> dict[str, Any]:
-    """Get detailed information about a BuildProcure repository."""
+    """Get normalized information about a BuildProcure repository."""
     return service.workspace_tool.get_repo_info(repo_name)
 
 
 @mcp.tool()
-def search_across_repos(query: str) -> dict[str, Any]:
-    """Search across BuildProcure repositories for a query or pattern."""
-    return service.search_tool.search_across_repos(query)
+def get_repo_tree(repo_name: str, target_ref: str = "main") -> dict[str, Any]:
+    """Get a repository file tree for a branch, tag, or commit ref."""
+    return service.content_tool.get_repo_tree(repo_name, target_ref=target_ref)
 
 
 @mcp.tool()
-def analyze_dependencies(repo_name: str) -> dict[str, Any]:
-    """Analyze dependencies for a specific BuildProcure repository."""
-    return service.dep_tool.analyze_dependencies(repo_name)
+def get_repo_file(repo_name: str, path: str, target_ref: str = "main") -> dict[str, Any]:
+    """Get one repository file by path and ref."""
+    return service.content_tool.get_repo_file(repo_name, path, target_ref=target_ref)
 
 
 @mcp.tool()
-def list_open_pull_requests(repo_name: str) -> dict[str, Any]:
-    """List open pull requests for a BuildProcure repository."""
-    return service.pr_review_tool.list_open_pull_requests(repo_name)
+def get_repo_files_batch(repo_name: str, paths: list[str], target_ref: str = "main") -> dict[str, Any]:
+    """Get multiple repository files by path and ref."""
+    return service.content_tool.get_repo_files_batch(repo_name, paths, target_ref=target_ref)
 
 
 @mcp.tool()
-def get_pull_request_details(repo_name: str, pr_number: int) -> dict[str, Any]:
-    """Get pull request metadata and changed files."""
-    return service.pr_review_tool.get_pull_request_details(repo_name, pr_number)
+def get_repo_manifest_summary(repo_name: str, target_ref: str = "main") -> dict[str, Any]:
+    """Detect repository manifests, stack hints, scripts, tests, and deployment hints."""
+    return service.dep_tool.get_repo_manifest_summary(repo_name, target_ref=target_ref)
 
 
 @mcp.tool()
-def get_pr_review_context(repo_name: str, pr_number: int) -> dict[str, Any]:
-    """Collect PR diff and repository context for senior software engineer review."""
-    return service.pr_review_tool.get_pr_review_context(repo_name, pr_number)
-
-@mcp.tool()
-def get_azure_work_item(work_item_id: int) -> dict[str, Any]:
-    """Get Azure Boards work item details by ID."""
-    return service.azure_devops_tool.get_azure_work_item(work_item_id)
+def analyze_dependencies(repo_name: str, target_ref: str = "main") -> dict[str, Any]:
+    """Alias for get_repo_manifest_summary."""
+    return service.dep_tool.analyze_dependencies(repo_name, target_ref=target_ref)
 
 
 @mcp.tool()
-def get_azure_context_for_text(text: str) -> dict[str, Any]:
-    """Extract Azure ticket IDs from text and fetch ticket/wiki context."""
-    return service.azure_devops_tool.get_azure_context_for_text(text)
+def search_across_repos(
+    query: str,
+    include_archived: bool = False,
+    max_results: int = 50,
+) -> dict[str, Any]:
+    """Search across policy-matching repositories and return bounded snippets."""
+    return service.search_tool.search_across_repos(
+        query,
+        include_archived=include_archived,
+        max_results=max_results,
+    )
 
 
 @mcp.tool()
-def get_azure_wiki_page(path: str) -> dict[str, Any] | None:
-    """Get Azure DevOps wiki page content by path."""
-    return service.azure_devops_tool.get_azure_wiki_page(path)
+def list_available_configs() -> dict[str, Any]:
+    """List available YAML configs and readable load errors."""
+    return service.config_tool.list_available_configs()
+
+
+@mcp.tool()
+def get_config(config_name: str) -> dict[str, Any]:
+    """Get one loaded config by name."""
+    return service.config_tool.get_config(config_name)
+
+
+@mcp.tool()
+def build_agent_context(
+    repo_name: str,
+    target_ref: str = "main",
+    paths: list[str] | None = None,
+) -> dict[str, Any]:
+    """Build generic reusable repository context for future agents."""
+    return service.agent_context_tool.build_agent_context(
+        repo_name,
+        target_ref=target_ref,
+        paths=paths,
+    )
+
 
 @mcp.custom_route("/health", methods=["GET"])
 async def health_check(request: Request) -> JSONResponse:
@@ -119,152 +161,10 @@ async def health_check(request: Request) -> JSONResponse:
             "status": "ok",
             "service": service.name,
             "version": service.version,
+            "tooling": "basic-foundation",
         }
     )
 
-
-@mcp.custom_route("/agent-review", methods=["POST"])
-async def agent_review_endpoint(request: Request) -> JSONResponse:
-    try:
-        payload = await request.json()
-    except Exception:
-        return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
-
-    repo_name = payload.get("repo_name")
-    pr_number = payload.get("pr_number")
-
-    if not repo_name or not pr_number:
-        return JSONResponse(
-            {"error": "repo_name and pr_number are required"},
-            status_code=400,
-        )
-
-    try:
-        context = service.pr_review_tool.get_pr_review_context(
-            repo_name=str(repo_name),
-            pr_number=int(pr_number),
-        )
-
-        review_markdown = call_openai_pr_reviewer(context)
-
-        return JSONResponse(
-            {
-                "repo_name": repo_name,
-                "pr_number": int(pr_number),
-                "review_markdown": review_markdown,
-                "context_used": context.get("repository_context", {}).get(
-                    "selected_context_files", []
-                ),
-            }
-        )
-
-    except Exception as exc:
-        logger.exception("Agent review failed")
-        return JSONResponse({"error": str(exc)}, status_code=500)
-
-#call OpenAI LLM to produce final Senior Engineer review from MCP context. 
-def call_openai_pr_reviewer(context: dict[str, Any]) -> str:
-    api_key = os.getenv("OPENAI_API_KEY")
-    model = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
-
-    if not api_key:
-        raise RuntimeError("OPENAI_API_KEY is missing on MCP server")
-
-    prompt = f"""
-You are the BuildProcure Senior PR Review Agent.
-
-Review this pull request like a senior software engineer.
-
-Use only the evidence provided below:
-- PR metadata
-- changed files
-- diff patches
-- repository context files collected by MCP
-
-Also use azure_devops_context when available:
-- Compare PR changes to Azure Boards title, description, acceptance criteria, and state.
-- If PR does not appear to satisfy acceptance criteria, call it out.
-- Use wiki pages as organizational standards/process context.
-- Do not invent ticket requirements beyond Azure context.
-
-Rules:
-1. Do not give generic comments.
-2. Do not invent issues.
-3. Every warning/blocker must be grounded in the diff or repo context.
-4. For documentation-only PRs, check accuracy against repo files. Do not request tests unless executable commands/examples changed.
-5. For code PRs, focus on correctness, regressions, edge cases, security, maintainability, and test impact.
-6. For deployment/config PRs, check ports, image names, env files, secrets, networks, rollback impact.
-7. If context is insufficient, say exactly what could not be verified.
-
-Return markdown in this exact format:
-
-## 🤖 BuildProcure Agent Review
-
-### Summary
-...
-
-### Senior Engineer Assessment
-...
-
-### Blockers
-- None, or specific blockers
-
-### Warnings
-- None, or specific warnings
-
-### Suggestions
-- None, or specific suggestions
-
-### Test Review
-...
-
-### Documentation Review
-...
-
-### Deployment / Config Impact
-...
-
-### Suggested Reviewer Comments
-- ...
-
-### Approval Recommendation
-Approve | Approve with comments | Request changes
-
-MCP review context:
-{json.dumps(context, indent=2)}
-"""
-
-    response = requests.post(
-        "https://api.openai.com/v1/responses",
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-        json={
-            "model": model,
-            "input": prompt,
-        },
-        timeout=120,
-    )
-
-    if response.status_code >= 400:
-        logger.error("OpenAI error: %s", response.text)
-
-    response.raise_for_status()
-    data = response.json()
-
-    text_parts = []
-    for item in data.get("output", []):
-        for content in item.get("content", []):
-            if content.get("type") == "output_text":
-                text_parts.append(content.get("text", ""))
-
-    review = "\n".join(text_parts).strip()
-
-    if not review:
-        raise RuntimeError(f"No review text returned from OpenAI: {data}")
-
-    return review
 
 if __name__ == "__main__":
     logger.info("Starting %s v%s", service.name, service.version)
