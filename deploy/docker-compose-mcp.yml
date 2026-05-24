@@ -6,7 +6,13 @@ services:
       - .env
     ports:
       - "3011:80"
+    networks:
+      - app-network
     restart: always
+
+networks:
+  app-network:
+    external: true
 
 # local testing with docker compose, not used in production
 # version: "3.9"
@@ -21,4 +27,6 @@ services:
 #       - ../.env
 #     ports:
 #       - "3011:80"
+#     networks:
+#       - app-network
 #     restart: unless-stopped
