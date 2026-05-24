@@ -5,6 +5,7 @@ from pathlib import Path
 from tools.agent_context_tools import AgentContextTool
 from tools.config_tools import ConfigTool
 from tools.cross_repo_search_tools import CrossRepoSearchTool
+from tools.database_schema_tools import DatabaseSchemaTool
 from tools.dependency_analyzer_tools import DependencyAnalyzerTool
 from tools.repository_content_tools import RepositoryContentTool
 from tools.unified_workspace_tools import UnifiedWorkspaceTool
@@ -137,6 +138,7 @@ def test_basic_tool_metadata(tmp_path: Path):
         UnifiedWorkspaceTool(discovery=discovery),
         RepositoryContentTool(github=github),
         CrossRepoSearchTool(github=github, discovery=discovery),
+        DatabaseSchemaTool(),
         DependencyAnalyzerTool(github=github),
         ConfigTool(config=config),
         AgentContextTool(github=github, config=config),
@@ -149,6 +151,7 @@ def test_basic_tool_metadata(tmp_path: Path):
     assert "get_repo_files_batch" in tool_names
     assert "get_repo_manifest_summary" in tool_names
     assert "list_available_configs" in tool_names
+    assert "get_database_schema" in tool_names
 
 
 def test_repo_discovery_respects_policy(tmp_path: Path):
