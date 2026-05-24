@@ -18,6 +18,7 @@ from starlette.responses import JSONResponse
 from tools.agent_context_tools import AgentContextTool
 from tools.config_tools import ConfigTool
 from tools.cross_repo_search_tools import CrossRepoSearchTool
+from tools.database_schema_tools import DatabaseSchemaTool
 from tools.dependency_analyzer_tools import DependencyAnalyzerTool
 from tools.repository_content_tools import RepositoryContentTool
 from tools.unified_workspace_tools import UnifiedWorkspaceTool
@@ -50,6 +51,7 @@ class BuildProcureService:
         self.search_tool = CrossRepoSearchTool(github=self.github, discovery=self.discovery)
         self.dep_tool = DependencyAnalyzerTool(github=self.github)
         self.config_tool = ConfigTool(config=self.config)
+        self.database_schema_tool = DatabaseSchemaTool()
         self.agent_context_tool = AgentContextTool(
             github=self.github,
             config=self.config,
@@ -63,6 +65,7 @@ class BuildProcureService:
             self.search_tool,
             self.dep_tool,
             self.config_tool,
+            self.database_schema_tool,
             self.agent_context_tool,
         ]:
             logger.info("Loaded %s tools from %s", len(tool_group.get_tools()), tool_group.__class__.__name__)
@@ -151,6 +154,41 @@ def build_agent_context(
         repo_name,
         target_ref=target_ref,
         paths=paths,
+    )
+
+
+@mcp.tool()
+def test_database_connection() -> dict[str, Any]:
+    """Check whether the configured MySQL schema connection works."""
+    return service.database_schema_tool.test_database_connection()
+
+
+@mcp.tool()
+def list_database_tables(schema_name: str | None = None) -> dict[str, Any]:
+    """List tables and views from the configured MySQL database."""
+    return service.database_schema_tool.list_database_tables(schema_name=schema_name)
+
+
+@mcp.tool()
+def describe_database_table(table_name: str, schema_name: str | None = None) -> dict[str, Any]:
+    """Describe columns, indexes, and foreign keys for one MySQL table."""
+    return service.database_schema_tool.describe_database_table(
+        table_name,
+        schema_name=schema_name,
+    )
+
+
+@mcp.tool()
+def get_database_schema(
+    schema_name: str | None = None,
+    include_columns: bool = True,
+    max_tables: int = 100,
+) -> dict[str, Any]:
+    """Get a bounded schema summary for the configured MySQL database."""
+    return service.database_schema_tool.get_database_schema(
+        schema_name=schema_name,
+        include_columns=include_columns,
+        max_tables=max_tables,
     )
 
 

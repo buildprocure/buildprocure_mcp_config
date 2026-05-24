@@ -12,6 +12,15 @@ MCP_DEBUG=false
 AUTO_DISCOVER_REPOS=true
 REPO_DISCOVERY_INTERVAL=86400
 
+# MySQL Schema Tool
+# Use a database user with read-only metadata access.
+MYSQL_HOST=localhost
+MYSQL_PORT=3306
+MYSQL_USER=readonly_schema_user
+MYSQL_PASSWORD=change_me
+MYSQL_DATABASE=buildprocure
+MYSQL_CONNECT_TIMEOUT=10
+
 # Logging
 LOG_LEVEL=INFO
 LOG_FILE=./logs/mcp.log
