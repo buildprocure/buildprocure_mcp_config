@@ -126,14 +126,21 @@ class DependencyAnalyzerTool:
         try:
             data = json.loads(content or "{}")
         except json.JSONDecodeError as exc:
-            return {"parse_error": f"Invalid package.json: {exc}"}
+            return {"parse_error": f"Invalid package.json: {exc}", "has_node_signals": False}
+
+        scripts = data.get("scripts") or {}
+        dependencies = sorted((data.get("dependencies") or {}).keys())
+        dev_dependencies = sorted((data.get("devDependencies") or {}).keys())
+        package_manager = data.get("packageManager")
+        has_node_signals = bool(scripts or dependencies or dev_dependencies or package_manager)
 
         return {
             "package_name": data.get("name"),
-            "package_manager": data.get("packageManager"),
-            "scripts": data.get("scripts", {}),
-            "dependencies": sorted((data.get("dependencies") or {}).keys()),
-            "dev_dependencies": sorted((data.get("devDependencies") or {}).keys()),
+            "package_manager": package_manager,
+            "scripts": scripts,
+            "dependencies": dependencies,
+            "dev_dependencies": dev_dependencies,
+            "has_node_signals": has_node_signals,
         }
 
     def _summarize_composer_json(self, content: str) -> dict[str, Any]:
@@ -157,7 +164,12 @@ class DependencyAnalyzerTool:
         deployment_hints = []
         test_hints = []
 
-        if "node_package" in manifest_types:
+        node_manifest_has_signals = any(
+            manifest.get("type") == "node_package" and manifest.get("has_node_signals")
+            for manifest in manifests
+        )
+        node_lock_present = any(path in tree for path in {"pnpm-lock.yaml", "yarn.lock", "package-lock.json"})
+        if node_manifest_has_signals or node_lock_present:
             runtime_hints.append("node")
             package_managers.append(self._detect_node_package_manager(paths, tree))
         if any(item in manifest_types for item in {"python_requirements", "python_project", "python_pipfile"}):
