@@ -10,8 +10,39 @@ MAX_FILE_CONTENT_CHARS = 25_000
 
 
 class PRReviewHelper:
+    def summarize_pull_request(self, pr: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "number": pr.get("number"),
+            "title": pr.get("title"),
+            "body": pr.get("body"),
+            "author": pr.get("user", {}).get("login"),
+            "state": pr.get("state"),
+            "url": pr.get("html_url"),
+            "created_at": pr.get("created_at"),
+            "updated_at": pr.get("updated_at"),
+            "base_branch": pr.get("base", {}).get("ref"),
+            "head_branch": pr.get("head", {}).get("ref"),
+            "base_sha": pr.get("base", {}).get("sha"),
+            "head_sha": pr.get("head", {}).get("sha"),
+        }
+
+    def summarize_changed_files(self, files: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return [
+            {
+                "filename": f.get("filename"),
+                "status": f.get("status"),
+                "additions": f.get("additions"),
+                "deletions": f.get("deletions"),
+                "changes": f.get("changes"),
+                "patch": self.trim_text(f.get("patch", "") or "", 20_000),
+                "raw_url": f.get("raw_url"),
+                "blob_url": f.get("blob_url"),
+            }
+            for f in files
+        ]
+
     def detect_pr_type(self, files: list[dict[str, Any]]) -> dict[str, Any]:
-        names = [f["filename"].lower() for f in files]
+        names = [f.get("filename", "").lower() for f in files]
 
         docs_only = all(
             name.endswith(DOC_EXTENSIONS)
@@ -61,31 +92,43 @@ class PRReviewHelper:
         diff_text: str,
     ) -> dict[str, Any]:
         return {
-            "number": pr.get("number"),
-            "title": pr.get("title"),
-            "body": pr.get("body"),
-            "state": pr.get("state"),
-            "author": pr.get("user", {}).get("login"),
-            "url": pr.get("html_url"),
-            "base_branch": pr.get("base", {}).get("ref"),
-            "head_branch": pr.get("head", {}).get("ref"),
+            **self.summarize_pull_request(pr),
             "changed_files_count": len(files),
             "additions": sum(f.get("additions", 0) for f in files),
             "deletions": sum(f.get("deletions", 0) for f in files),
-            "changed_files": [
-                {
-                    "filename": f.get("filename"),
-                    "status": f.get("status"),
-                    "additions": f.get("additions"),
-                    "deletions": f.get("deletions"),
-                    "changes": f.get("changes"),
-                    "patch": f.get("patch", "")[:20_000],
-                }
-                for f in files
-            ],
+            "changed_files": self.summarize_changed_files(files),
             "diff": self.trim_text(diff_text, MAX_DIFF_CHARS),
             "diff_truncated": len(diff_text) > MAX_DIFF_CHARS,
         }
+
+    def build_lookup_text(self, pr: dict[str, Any], files: list[dict[str, Any]]) -> str:
+        text_parts = [
+            pr.get("title") or "",
+            pr.get("body") or "",
+            pr.get("head", {}).get("ref") or "",
+            pr.get("base", {}).get("ref") or "",
+        ]
+        for file_data in files:
+            text_parts.append(file_data.get("filename", "") or "")
+            text_parts.append(file_data.get("patch", "") or "")
+        return "\n".join(text_parts)
+
+    def match_database_tables(
+        self,
+        lookup_text: str,
+        tables: list[dict[str, Any]],
+    ) -> list[str]:
+        normalized_text = lookup_text.lower()
+        matched = []
+        for table in tables:
+            table_name = table.get("table_name")
+            if not table_name:
+                continue
+            table_lower = table_name.lower()
+            table_tokens = table_lower.replace("_", " ")
+            if table_lower in normalized_text or table_tokens in normalized_text:
+                matched.append(table_name)
+        return list(dict.fromkeys(matched))
 
     def select_context_files(self, repo_tree: list[str], changed_files: list[str]) -> list[str]:
         important_names = {
@@ -150,6 +193,8 @@ Use only evidence from:
 2. changed files
 3. diff
 4. repository context files
+5. Azure Boards/wiki context when available
+6. database schema context when available
 
 Do not give generic comments.
 Do not invent issues.
@@ -194,3 +239,24 @@ Review it for:
 - missing or weak tests
 - backward compatibility
 """
+
+    def expected_review_output_format(self) -> dict[str, Any]:
+        return {
+            "summary": "Short summary of what changed and intent.",
+            "senior_engineer_assessment": "Concise engineering judgment grounded in evidence.",
+            "blockers": ["Only issues that should block merge."],
+            "warnings": ["Risks or concerns that should be addressed or confirmed."],
+            "suggestions": ["Non-blocking improvements."],
+            "test_review": "Whether tests are needed based on actual change type.",
+            "documentation_review": "Only if docs are changed or impacted.",
+            "deployment_or_config_impact": "Only if relevant.",
+            "azure_boards_alignment": "Only if Azure work item context is available.",
+            "database_schema_impact": "Only if database schema context is relevant.",
+            "recommended_reviewer_comments": [
+                {
+                    "file": "path if applicable",
+                    "comment": "Specific comment grounded in evidence",
+                }
+            ],
+            "approval_recommendation": "approve | approve_with_comments | request_changes",
+        }
