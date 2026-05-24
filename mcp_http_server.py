@@ -16,6 +16,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from tools.agent_context_tools import AgentContextTool
+from tools.architecture_agent_tools import ArchitectureAgentTool
 from tools.config_tools import ConfigTool
 from tools.cross_repo_search_tools import CrossRepoSearchTool
 from tools.database_schema_tools import DatabaseSchemaTool
@@ -58,6 +59,12 @@ class BuildProcureService:
             content_tool=self.content_tool,
             dependency_tool=self.dep_tool,
         )
+        self.architecture_agent_tool = ArchitectureAgentTool(
+            github=self.github,
+            agent_context_tool=self.agent_context_tool,
+            content_tool=self.content_tool,
+            database_schema_tool=self.database_schema_tool,
+        )
 
         for tool_group in [
             self.workspace_tool,
@@ -67,6 +74,7 @@ class BuildProcureService:
             self.config_tool,
             self.database_schema_tool,
             self.agent_context_tool,
+            self.architecture_agent_tool,
         ]:
             logger.info("Loaded %s tools from %s", len(tool_group.get_tools()), tool_group.__class__.__name__)
 
@@ -189,6 +197,24 @@ def get_database_schema(
         schema_name=schema_name,
         include_columns=include_columns,
         max_tables=max_tables,
+    )
+
+
+@mcp.tool()
+def build_architecture_analysis(
+    repo_name: str,
+    target_ref: str = "main",
+    module_path: str | None = None,
+    work_item_id: int | None = None,
+    include_database_schema: bool = True,
+) -> dict[str, Any]:
+    """Collect architecture evidence for PHP-to-React migration planning."""
+    return service.architecture_agent_tool.build_architecture_analysis(
+        repo_name=repo_name,
+        target_ref=target_ref,
+        module_path=module_path,
+        work_item_id=work_item_id,
+        include_database_schema=include_database_schema,
     )
 
 

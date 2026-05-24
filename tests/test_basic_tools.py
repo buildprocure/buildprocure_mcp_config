@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from tools.agent_context_tools import AgentContextTool
+from tools.architecture_agent_tools import ArchitectureAgentTool
 from tools.config_tools import ConfigTool
 from tools.cross_repo_search_tools import CrossRepoSearchTool
 from tools.database_schema_tools import DatabaseSchemaTool
@@ -136,6 +137,7 @@ def test_basic_tool_metadata(tmp_path: Path):
     tool_names = set()
     for tool in [
         UnifiedWorkspaceTool(discovery=discovery),
+        ArchitectureAgentTool(github=github),
         RepositoryContentTool(github=github),
         CrossRepoSearchTool(github=github, discovery=discovery),
         DatabaseSchemaTool(),
@@ -152,6 +154,7 @@ def test_basic_tool_metadata(tmp_path: Path):
     assert "get_repo_manifest_summary" in tool_names
     assert "list_available_configs" in tool_names
     assert "get_database_schema" in tool_names
+    assert "build_architecture_analysis" in tool_names
 
 
 def test_repo_discovery_respects_policy(tmp_path: Path):
