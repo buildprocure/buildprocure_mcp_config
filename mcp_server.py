@@ -22,6 +22,7 @@ from tools.database_schema_tools import DatabaseSchemaTool
 from tools.dependency_analyzer_tools import DependencyAnalyzerTool
 from tools.legacy_php_analysis_tools import LegacyPHPAnalysisTool
 from tools.migration_spec_tools import MigrationSpecTool
+from tools.migration_orchestrator_tools import MigrationOrchestratorTool
 from tools.pr_review_tools import PRReviewTool
 from tools.react_code_writer_tools import ReactCodeWriterTool
 from tools.react_conversion_tools import ReactConversionTool
@@ -84,6 +85,9 @@ class BuildProcureService:
             github=self.github,
             react_conversion_tool=self.react_conversion_tool,
         )
+        self.migration_orchestrator_tool = MigrationOrchestratorTool(
+            react_code_writer_tool=self.react_code_writer_tool,
+        )
         self.pr_review_tool = PRReviewTool(
             github=self.github,
             agent_context_tool=self.agent_context_tool,
@@ -105,6 +109,7 @@ class BuildProcureService:
             self.migration_spec_tool,
             self.react_conversion_tool,
             self.react_code_writer_tool,
+            self.migration_orchestrator_tool,
             self.pr_review_tool,
         ]:
             logger.info("Loaded %s tools from %s", len(tool_group.get_tools()), tool_group.__class__.__name__)
@@ -369,6 +374,48 @@ def write_react_conversion_files(
         target_repo_name=target_repo_name,
         module_name=module_name,
         target_ref=target_ref,
+        module_path=module_path,
+        related_paths=related_paths,
+        focus_terms=focus_terms,
+        table_names=table_names,
+        schema_name=schema_name,
+        work_item_id=work_item_id,
+        react_app_root=react_app_root,
+        target_branch=target_branch,
+        base_branch=base_branch,
+        dry_run=dry_run,
+        overwrite=overwrite,
+        create_pull_request=create_pull_request,
+    )
+
+
+@mcp.tool()
+def run_migration_request(
+    request_text: str,
+    source_repo_name: str,
+    target_repo_name: str,
+    target_ref: str = "main",
+    module_name: str | None = None,
+    module_path: str | None = None,
+    related_paths: list[str] | None = None,
+    focus_terms: list[str] | None = None,
+    table_names: list[str] | None = None,
+    schema_name: str | None = None,
+    work_item_id: int | None = None,
+    react_app_root: str = "src",
+    target_branch: str | None = None,
+    base_branch: str = "main",
+    dry_run: bool = True,
+    overwrite: bool = False,
+    create_pull_request: bool = True,
+) -> dict[str, Any]:
+    """Run a natural-language PHP-to-React migration request through the agent chain."""
+    return service.migration_orchestrator_tool.run_migration_request(
+        request_text=request_text,
+        source_repo_name=source_repo_name,
+        target_repo_name=target_repo_name,
+        target_ref=target_ref,
+        module_name=module_name,
         module_path=module_path,
         related_paths=related_paths,
         focus_terms=focus_terms,
