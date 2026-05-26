@@ -24,6 +24,7 @@ from tools.database_model_context_tools import DatabaseModelContextTool
 from tools.database_schema_tools import DatabaseSchemaTool
 from tools.dependency_analyzer_tools import DependencyAnalyzerTool
 from tools.legacy_php_analysis_tools import LegacyPHPAnalysisTool
+from tools.migration_spec_tools import MigrationSpecTool
 from tools.pr_review_tools import PRReviewTool
 from tools.repository_content_tools import RepositoryContentTool
 from tools.unified_workspace_tools import UnifiedWorkspaceTool
@@ -77,6 +78,11 @@ class BuildProcureService:
             content_tool=self.content_tool,
             database_schema_tool=self.database_schema_tool,
         )
+        self.migration_spec_tool = MigrationSpecTool(
+            architecture_agent_tool=self.architecture_agent_tool,
+            legacy_php_analysis_tool=self.legacy_php_analysis_tool,
+            database_model_context_tool=self.database_model_context_tool,
+        )
         self.pr_review_tool = PRReviewTool(
             github=self.github,
             agent_context_tool=self.agent_context_tool,
@@ -94,6 +100,7 @@ class BuildProcureService:
             self.agent_context_tool,
             self.architecture_agent_tool,
             self.legacy_php_analysis_tool,
+            self.migration_spec_tool,
             self.pr_review_tool,
         ]:
             logger.info("Loaded %s tools from %s", len(tool_group.get_tools()), tool_group.__class__.__name__)
@@ -272,6 +279,34 @@ def analyze_legacy_php_module(
         module_path=module_path,
         related_paths=related_paths,
         focus_terms=focus_terms,
+        include_database_schema=include_database_schema,
+    )
+
+
+@mcp.tool()
+def build_migration_spec(
+    repo_name: str,
+    module_name: str,
+    target_ref: str = "main",
+    module_path: str | None = None,
+    related_paths: list[str] | None = None,
+    focus_terms: list[str] | None = None,
+    table_names: list[str] | None = None,
+    schema_name: str | None = None,
+    work_item_id: int | None = None,
+    include_database_schema: bool = True,
+) -> dict[str, Any]:
+    """Build a structured PHP-to-React migration spec for one module slice."""
+    return service.migration_spec_tool.build_migration_spec(
+        repo_name=repo_name,
+        module_name=module_name,
+        target_ref=target_ref,
+        module_path=module_path,
+        related_paths=related_paths,
+        focus_terms=focus_terms,
+        table_names=table_names,
+        schema_name=schema_name,
+        work_item_id=work_item_id,
         include_database_schema=include_database_schema,
     )
 
