@@ -17,6 +17,7 @@ from tools.agent_context_tools import AgentContextTool
 from tools.architecture_agent_tools import ArchitectureAgentTool
 from tools.config_tools import ConfigTool
 from tools.cross_repo_search_tools import CrossRepoSearchTool
+from tools.database_model_context_tools import DatabaseModelContextTool
 from tools.database_schema_tools import DatabaseSchemaTool
 from tools.dependency_analyzer_tools import DependencyAnalyzerTool
 from tools.legacy_php_analysis_tools import LegacyPHPAnalysisTool
@@ -52,6 +53,7 @@ class BuildProcureService:
         self.dep_tool = DependencyAnalyzerTool(github=self.github)
         self.config_tool = ConfigTool(config=self.config)
         self.database_schema_tool = DatabaseSchemaTool()
+        self.database_model_context_tool = DatabaseModelContextTool(database_schema_tool=self.database_schema_tool)
         self.agent_context_tool = AgentContextTool(
             github=self.github,
             config=self.config,
@@ -83,6 +85,7 @@ class BuildProcureService:
             self.dep_tool,
             self.config_tool,
             self.database_schema_tool,
+            self.database_model_context_tool,
             self.agent_context_tool,
             self.architecture_agent_tool,
             self.legacy_php_analysis_tool,
@@ -207,6 +210,24 @@ def get_database_schema(
     return service.database_schema_tool.get_database_schema(
         schema_name=schema_name,
         include_columns=include_columns,
+        max_tables=max_tables,
+    )
+
+
+@mcp.tool()
+def build_database_model_context(
+    schema_name: str | None = None,
+    table_names: list[str] | None = None,
+    focus_terms: list[str] | None = None,
+    include_relationships: bool = True,
+    max_tables: int = 40,
+) -> dict[str, Any]:
+    """Build read-only database model context for migration planning."""
+    return service.database_model_context_tool.build_database_model_context(
+        schema_name=schema_name,
+        table_names=table_names,
+        focus_terms=focus_terms,
+        include_relationships=include_relationships,
         max_tables=max_tables,
     )
 

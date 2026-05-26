@@ -6,6 +6,7 @@ from tools.agent_context_tools import AgentContextTool
 from tools.architecture_agent_tools import ArchitectureAgentTool
 from tools.config_tools import ConfigTool
 from tools.cross_repo_search_tools import CrossRepoSearchTool
+from tools.database_model_context_tools import DatabaseModelContextTool
 from tools.database_schema_tools import DatabaseSchemaTool
 from tools.dependency_analyzer_tools import DependencyAnalyzerTool
 from tools.legacy_php_analysis_tools import LegacyPHPAnalysisTool
@@ -141,6 +142,7 @@ def test_basic_tool_metadata(tmp_path: Path):
         ArchitectureAgentTool(github=github),
         RepositoryContentTool(github=github),
         CrossRepoSearchTool(github=github, discovery=discovery),
+        DatabaseModelContextTool(),
         DatabaseSchemaTool(),
         DependencyAnalyzerTool(github=github),
         LegacyPHPAnalysisTool(github=github),
@@ -156,6 +158,7 @@ def test_basic_tool_metadata(tmp_path: Path):
     assert "get_repo_manifest_summary" in tool_names
     assert "list_available_configs" in tool_names
     assert "get_database_schema" in tool_names
+    assert "build_database_model_context" in tool_names
     assert "build_architecture_analysis" in tool_names
     assert "analyze_legacy_php_module" in tool_names
 
