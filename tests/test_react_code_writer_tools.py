@@ -81,18 +81,22 @@ def test_react_code_writer_metadata():
     assert names == ["write_react_conversion_files"]
 
 
-def test_write_react_conversion_files_dry_run_generates_files():
+def test_write_react_conversion_files_generates_local_files_only():
     result = _tool().write_react_conversion_files(
         source_repo_name="procurex",
         target_repo_name="procurex-react",
         module_name="Buyer BOQ",
         work_item_id=53,
-        dry_run=True,
+        dry_run=False,
+        create_pull_request=True,
     )
 
     assert result["ok"] is True
     assert result["agent"] == "react_code_writer_agent"
     assert result["dry_run"] is True
+    assert result["requested_dry_run"] is False
+    assert result["requested_create_pull_request"] is True
+    assert result["remote_writes_enabled"] is False
     assert result["target_branch"] == "ab-53-buyer-boq-react-scaffold"
     assert result["file_count"] >= 7
 
@@ -102,7 +106,9 @@ def test_write_react_conversion_files_dry_run_generates_files():
     assert "src/features/buyer-boq/components/BuyerBOQBoqList.tsx" in paths
     assert "src/features/buyer-boq/hooks/useBoqList.ts" in paths
     assert "src/features/buyer-boq/routes.tsx" in paths
+    assert result["local_files"] == result["generated_files"]
     assert result["write_results"] == []
+    assert result["pull_request"] is None
 
     api_file = next(file_data for file_data in result["generated_files"] if file_data["path"].endswith("buyerBoqApi.ts"))
     assert "export async function fetchBoqList" in api_file["content"]

@@ -1,24 +1,18 @@
 """
 React Code Writer Agent Tools
-Generate and write React migration files into a target GitHub repository.
+Generate React migration files for local application by a local editor/agent.
 """
 
 from __future__ import annotations
 
-import base64
 from typing import Any
-from urllib.parse import quote
-
-import requests
 
 from tools.react_conversion_tools import ReactConversionTool
 from utils.github_helpers import GitHubHelper
 
-MAX_WRITTEN_FILES = 80
-
 
 class ReactCodeWriterTool:
-    """Write generated React conversion files to a target repository branch."""
+    """Generate React conversion files without writing to remote GitHub."""
 
     def __init__(
         self,
@@ -32,7 +26,7 @@ class ReactCodeWriterTool:
         return [
             {
                 "name": "write_react_conversion_files",
-                "description": "Generate React migration files and write them to a target GitHub repository branch",
+                "description": "Generate React migration files for local application; remote GitHub writes are disabled",
             }
         ]
 
@@ -80,56 +74,27 @@ class ReactCodeWriterTool:
         generated_files = self._generate_files(module_name, plan)
         branch_name = target_branch or self._branch_name(module_name, work_item_id)
 
-        result = {
+        return {
             "ok": True,
             "agent": "react_code_writer_agent",
             "source_repo_name": source_repo_name,
             "target_repo_name": target_repo_name,
             "base_branch": base_branch,
             "target_branch": branch_name,
-            "dry_run": dry_run,
+            "dry_run": True,
             "overwrite": overwrite,
+            "remote_writes_enabled": False,
+            "requested_dry_run": dry_run,
+            "requested_create_pull_request": create_pull_request,
             "file_count": len(generated_files),
             "generated_files": generated_files,
+            "local_files": generated_files,
             "conversion_plan_context": conversion_result,
             "write_results": [],
             "pull_request": None,
+            "message": "Remote GitHub writes are disabled. Apply local_files into your local target repo and test before committing.",
             "expected_agent_output": self._expected_agent_output(),
         }
-
-        if dry_run:
-            return result
-
-        branch_result = self._ensure_branch(target_repo_name, branch_name, base_branch)
-        if not branch_result.get("ok"):
-            return result | {"ok": False, "error": branch_result.get("error"), "branch_result": branch_result}
-
-        write_results = []
-        for file_data in generated_files[:MAX_WRITTEN_FILES]:
-            write_results.append(
-                self._upsert_file(
-                    repo_name=target_repo_name,
-                    branch_name=branch_name,
-                    path=file_data["path"],
-                    content=file_data["content"],
-                    message=self._commit_message(module_name, work_item_id, file_data["path"]),
-                    overwrite=overwrite,
-                )
-            )
-
-        result["write_results"] = write_results
-        result["ok"] = all(item.get("ok") or item.get("skipped") for item in write_results)
-
-        if result["ok"] and create_pull_request:
-            result["pull_request"] = self._create_pull_request(
-                repo_name=target_repo_name,
-                branch_name=branch_name,
-                base_branch=base_branch,
-                module_name=module_name,
-                work_item_id=work_item_id,
-            )
-
-        return result
 
     def _generate_files(self, module_name: str, plan: dict[str, Any]) -> list[dict[str, str]]:
         file_plan = plan.get("file_plan", {})
@@ -290,92 +255,9 @@ Generated React migration scaffold.
 {risks or "- None captured."}
 """
 
-    def _ensure_branch(self, repo_name: str, branch_name: str, base_branch: str) -> dict[str, Any]:
-        existing = self._get_branch(repo_name, branch_name)
-        if existing.get("ok"):
-            return existing | {"created": False}
-
-        base = self._get_branch(repo_name, base_branch)
-        if not base.get("ok"):
-            return base
-
-        url = f"{self.github.api_url}/repos/{self.github.github_org}/{repo_name}/git/refs"
-        response = self.github._request(
-            "POST",
-            url,
-            json={"ref": f"refs/heads/{branch_name}", "sha": base["sha"]},
-        )
-        if response.status_code not in {200, 201}:
-            return self.github._error(response.text, response.status_code)
-        return {"ok": True, "branch": branch_name, "sha": base["sha"], "created": True}
-
-    def _get_branch(self, repo_name: str, branch_name: str) -> dict[str, Any]:
-        url = f"{self.github.api_url}/repos/{self.github.github_org}/{repo_name}/branches/{quote(branch_name, safe='')}"
-        response = self.github._request("GET", url)
-        if response.status_code != 200:
-            return self.github._error(response.text, response.status_code)
-        data = response.json()
-        return {"ok": True, "branch": branch_name, "sha": data["commit"]["sha"]}
-
-    def _upsert_file(
-        self,
-        repo_name: str,
-        branch_name: str,
-        path: str,
-        content: str,
-        message: str,
-        overwrite: bool,
-    ) -> dict[str, Any]:
-        existing = self.github.get_repo_file_safe(repo_name, path, ref=branch_name)
-        if existing.get("ok") and not overwrite:
-            return {"ok": True, "skipped": True, "path": path, "reason": "file exists and overwrite=false"}
-
-        payload: dict[str, Any] = {
-            "message": message,
-            "content": base64.b64encode(content.encode("utf-8")).decode("ascii"),
-            "branch": branch_name,
-        }
-        if existing.get("ok"):
-            payload["sha"] = existing["file"].get("sha")
-
-        url = f"{self.github.api_url}/repos/{self.github.github_org}/{repo_name}/contents/{quote(path)}"
-        response = self.github._request("PUT", url, json=payload)
-        if response.status_code not in {200, 201}:
-            return {"ok": False, "path": path, "error": response.text, "status_code": response.status_code}
-        return {"ok": True, "path": path, "status_code": response.status_code, "html_url": response.json().get("content", {}).get("html_url")}
-
-    def _create_pull_request(
-        self,
-        repo_name: str,
-        branch_name: str,
-        base_branch: str,
-        module_name: str,
-        work_item_id: int | None,
-    ) -> dict[str, Any]:
-        title = self._commit_prefix(work_item_id) + f" Add {module_name} React scaffold"
-        body = "Generated React migration scaffold from the React Code Writer Agent."
-        url = f"{self.github.api_url}/repos/{self.github.github_org}/{repo_name}/pulls"
-        response = self.github._request(
-            "POST",
-            url,
-            json={"title": title, "head": branch_name, "base": base_branch, "body": body},
-        )
-        if response.status_code not in {200, 201, 422}:
-            return {"ok": False, "error": response.text, "status_code": response.status_code}
-        if response.status_code == 422:
-            return {"ok": False, "error": "Pull request may already exist", "status_code": response.status_code}
-        data = response.json()
-        return {"ok": True, "number": data.get("number"), "url": data.get("html_url")}
-
     def _branch_name(self, module_name: str, work_item_id: int | None) -> str:
         prefix = f"ab-{work_item_id}-" if work_item_id else ""
         return f"{prefix}{self._slug(module_name)}-react-scaffold"
-
-    def _commit_message(self, module_name: str, work_item_id: int | None, path: str) -> str:
-        return self._commit_prefix(work_item_id) + f" Add {module_name} React scaffold file {path}"
-
-    def _commit_prefix(self, work_item_id: int | None) -> str:
-        return f"AB#{work_item_id}" if work_item_id else "React migration"
 
     def _client_function_for_hook(self, hook: dict[str, Any]) -> str:
         hook_name = hook.get("hook_name", "useData")
@@ -395,7 +277,7 @@ Generated React migration scaffold.
     def _expected_agent_output(self) -> dict[str, Any]:
         return {
             "generated_files": ["Files generated from the React conversion plan."],
-            "write_results": ["GitHub write results for each file when dry_run=false."],
-            "pull_request": "Target repository PR metadata when create_pull_request=true.",
-            "next_steps": ["Review generated scaffold, fill business behavior, and run frontend tests."],
+            "local_files": ["Same file list intended for application in the user's local target repo."],
+            "write_results": ["Always empty because remote GitHub writes are disabled."],
+            "next_steps": ["Apply local_files locally, run frontend tests, then commit/push manually after review."],
         }

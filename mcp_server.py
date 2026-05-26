@@ -368,7 +368,7 @@ def write_react_conversion_files(
     overwrite: bool = False,
     create_pull_request: bool = True,
 ) -> dict[str, Any]:
-    """Generate React migration files and write them to a target repository branch."""
+    """Generate React migration files for local application; remote GitHub writes are disabled."""
     return service.react_code_writer_tool.write_react_conversion_files(
         source_repo_name=source_repo_name,
         target_repo_name=target_repo_name,

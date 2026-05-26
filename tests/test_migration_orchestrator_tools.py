@@ -13,9 +13,14 @@ class FakeReactCodeWriterTool:
             "ok": True,
             "agent": "react_code_writer_agent",
             "target_branch": kwargs["target_branch"],
-            "dry_run": kwargs["dry_run"],
+            "dry_run": True,
+            "requested_dry_run": kwargs["dry_run"],
+            "remote_writes_enabled": False,
             "file_count": 3,
             "generated_files": [
+                {"path": "src/features/buyer-boq/routes.tsx", "content": "..."},
+            ],
+            "local_files": [
                 {"path": "src/features/buyer-boq/routes.tsx", "content": "..."},
             ],
         }
