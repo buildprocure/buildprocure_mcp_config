@@ -15,6 +15,7 @@ from mcp.server.fastmcp import FastMCP
 
 from tools.agent_context_tools import AgentContextTool
 from tools.architecture_agent_tools import ArchitectureAgentTool
+from tools.backend_api_bridge_tools import BackendAPIBridgeTool
 from tools.config_tools import ConfigTool
 from tools.cross_repo_search_tools import CrossRepoSearchTool
 from tools.database_model_context_tools import DatabaseModelContextTool
@@ -88,6 +89,7 @@ class BuildProcureService:
         self.migration_orchestrator_tool = MigrationOrchestratorTool(
             react_code_writer_tool=self.react_code_writer_tool,
         )
+        self.backend_api_bridge_tool = BackendAPIBridgeTool(migration_spec_tool=self.migration_spec_tool)
         self.pr_review_tool = PRReviewTool(
             github=self.github,
             agent_context_tool=self.agent_context_tool,
@@ -110,6 +112,7 @@ class BuildProcureService:
             self.react_conversion_tool,
             self.react_code_writer_tool,
             self.migration_orchestrator_tool,
+            self.backend_api_bridge_tool,
             self.pr_review_tool,
         ]:
             logger.info("Loaded %s tools from %s", len(tool_group.get_tools()), tool_group.__class__.__name__)
@@ -428,6 +431,36 @@ def run_migration_request(
         dry_run=dry_run,
         overwrite=overwrite,
         create_pull_request=create_pull_request,
+    )
+
+
+@mcp.tool()
+def generate_backend_api_bridge_files(
+    repo_name: str,
+    module_name: str,
+    target_ref: str = "main",
+    module_path: str | None = None,
+    related_paths: list[str] | None = None,
+    focus_terms: list[str] | None = None,
+    table_names: list[str] | None = None,
+    schema_name: str | None = None,
+    work_item_id: int | None = None,
+    api_root: str = "api",
+    include_database_schema: bool = True,
+) -> dict[str, Any]:
+    """Generate local PHP API bridge files for a PHP-to-React migration slice."""
+    return service.backend_api_bridge_tool.generate_backend_api_bridge_files(
+        repo_name=repo_name,
+        module_name=module_name,
+        target_ref=target_ref,
+        module_path=module_path,
+        related_paths=related_paths,
+        focus_terms=focus_terms,
+        table_names=table_names,
+        schema_name=schema_name,
+        work_item_id=work_item_id,
+        api_root=api_root,
+        include_database_schema=include_database_schema,
     )
 
 
