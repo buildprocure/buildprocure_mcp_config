@@ -10,6 +10,7 @@ from tools.database_model_context_tools import DatabaseModelContextTool
 from tools.database_schema_tools import DatabaseSchemaTool
 from tools.dependency_analyzer_tools import DependencyAnalyzerTool
 from tools.legacy_php_analysis_tools import LegacyPHPAnalysisTool
+from tools.migration_orchestrator_tools import MigrationOrchestratorTool
 from tools.migration_spec_tools import MigrationSpecTool
 from tools.react_code_writer_tools import ReactCodeWriterTool
 from tools.react_conversion_tools import ReactConversionTool
@@ -149,6 +150,7 @@ def test_basic_tool_metadata(tmp_path: Path):
         DatabaseSchemaTool(),
         DependencyAnalyzerTool(github=github),
         LegacyPHPAnalysisTool(github=github),
+        MigrationOrchestratorTool(),
         MigrationSpecTool(),
         ReactConversionTool(),
         ReactCodeWriterTool(),
@@ -167,6 +169,7 @@ def test_basic_tool_metadata(tmp_path: Path):
     assert "build_database_model_context" in tool_names
     assert "build_architecture_analysis" in tool_names
     assert "analyze_legacy_php_module" in tool_names
+    assert "run_migration_request" in tool_names
     assert "build_migration_spec" in tool_names
     assert "build_react_conversion_plan" in tool_names
     assert "write_react_conversion_files" in tool_names
