@@ -103,7 +103,7 @@ class MigrationOrchestratorTool:
             "inferred_inputs": inferred,
             "orchestration_steps": [
                 "Infer module, path, focus terms, related paths, tables, and target branch.",
-                "Run React Code Writer Agent.",
+                "Run React Code Writer Agent in local-output mode.",
                 "React Code Writer Agent runs React Conversion Agent.",
                 "React Conversion Agent runs Migration Spec Agent.",
                 "Migration Spec Agent composes Architecture, Legacy PHP, and Database Model Context agents.",
@@ -219,6 +219,6 @@ class MigrationOrchestratorTool:
         return {
             "inferred_inputs": "Inputs inferred from request text and caller overrides.",
             "orchestration_steps": ["Agent chain executed for the migration request."],
-            "writer_result": "Dry-run or write result from React Code Writer Agent.",
-            "next_steps": ["Confirm dry-run output, then rerun with dry_run=false to write files."],
+            "writer_result": "Generated local file outputs from React Code Writer Agent.",
+            "next_steps": ["Apply generated local_files in the local target repo, test, then commit/push manually."],
         }
