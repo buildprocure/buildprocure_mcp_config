@@ -4,6 +4,7 @@ from pathlib import Path
 
 from tools.agent_context_tools import AgentContextTool
 from tools.architecture_agent_tools import ArchitectureAgentTool
+from tools.backend_api_bridge_tools import BackendAPIBridgeTool
 from tools.config_tools import ConfigTool
 from tools.cross_repo_search_tools import CrossRepoSearchTool
 from tools.database_model_context_tools import DatabaseModelContextTool
@@ -154,6 +155,7 @@ def test_basic_tool_metadata(tmp_path: Path):
         MigrationSpecTool(),
         ReactConversionTool(),
         ReactCodeWriterTool(),
+        BackendAPIBridgeTool(),
         ConfigTool(config=config),
         AgentContextTool(github=github, config=config),
     ]:
@@ -173,6 +175,7 @@ def test_basic_tool_metadata(tmp_path: Path):
     assert "build_migration_spec" in tool_names
     assert "build_react_conversion_plan" in tool_names
     assert "write_react_conversion_files" in tool_names
+    assert "generate_backend_api_bridge_files" in tool_names
 
 
 def test_repo_discovery_respects_policy(tmp_path: Path):
