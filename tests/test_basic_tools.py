@@ -11,6 +11,7 @@ from tools.database_schema_tools import DatabaseSchemaTool
 from tools.dependency_analyzer_tools import DependencyAnalyzerTool
 from tools.legacy_php_analysis_tools import LegacyPHPAnalysisTool
 from tools.migration_spec_tools import MigrationSpecTool
+from tools.react_conversion_tools import ReactConversionTool
 from tools.repository_content_tools import RepositoryContentTool
 from tools.unified_workspace_tools import UnifiedWorkspaceTool
 from utils.config_manager import ConfigManager
@@ -148,6 +149,7 @@ def test_basic_tool_metadata(tmp_path: Path):
         DependencyAnalyzerTool(github=github),
         LegacyPHPAnalysisTool(github=github),
         MigrationSpecTool(),
+        ReactConversionTool(),
         ConfigTool(config=config),
         AgentContextTool(github=github, config=config),
     ]:
@@ -164,6 +166,7 @@ def test_basic_tool_metadata(tmp_path: Path):
     assert "build_architecture_analysis" in tool_names
     assert "analyze_legacy_php_module" in tool_names
     assert "build_migration_spec" in tool_names
+    assert "build_react_conversion_plan" in tool_names
 
 
 def test_repo_discovery_respects_policy(tmp_path: Path):
