@@ -19,6 +19,7 @@ from tools.config_tools import ConfigTool
 from tools.cross_repo_search_tools import CrossRepoSearchTool
 from tools.database_schema_tools import DatabaseSchemaTool
 from tools.dependency_analyzer_tools import DependencyAnalyzerTool
+from tools.legacy_php_analysis_tools import LegacyPHPAnalysisTool
 from tools.pr_review_tools import PRReviewTool
 from tools.repository_content_tools import RepositoryContentTool
 from tools.unified_workspace_tools import UnifiedWorkspaceTool
@@ -63,6 +64,11 @@ class BuildProcureService:
             content_tool=self.content_tool,
             database_schema_tool=self.database_schema_tool,
         )
+        self.legacy_php_analysis_tool = LegacyPHPAnalysisTool(
+            github=self.github,
+            content_tool=self.content_tool,
+            database_schema_tool=self.database_schema_tool,
+        )
         self.pr_review_tool = PRReviewTool(
             github=self.github,
             agent_context_tool=self.agent_context_tool,
@@ -79,6 +85,7 @@ class BuildProcureService:
             self.database_schema_tool,
             self.agent_context_tool,
             self.architecture_agent_tool,
+            self.legacy_php_analysis_tool,
             self.pr_review_tool,
         ]:
             logger.info("Loaded %s tools from %s", len(tool_group.get_tools()), tool_group.__class__.__name__)
@@ -218,6 +225,26 @@ def build_architecture_analysis(
         target_ref=target_ref,
         module_path=module_path,
         work_item_id=work_item_id,
+        include_database_schema=include_database_schema,
+    )
+
+
+@mcp.tool()
+def analyze_legacy_php_module(
+    repo_name: str,
+    target_ref: str = "main",
+    module_path: str | None = None,
+    related_paths: list[str] | None = None,
+    focus_terms: list[str] | None = None,
+    include_database_schema: bool = True,
+) -> dict[str, Any]:
+    """Analyze a focused legacy PHP module before PHP-to-React migration."""
+    return service.legacy_php_analysis_tool.analyze_legacy_php_module(
+        repo_name=repo_name,
+        target_ref=target_ref,
+        module_path=module_path,
+        related_paths=related_paths,
+        focus_terms=focus_terms,
         include_database_schema=include_database_schema,
     )
 
