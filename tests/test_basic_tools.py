@@ -8,6 +8,7 @@ from tools.config_tools import ConfigTool
 from tools.cross_repo_search_tools import CrossRepoSearchTool
 from tools.database_schema_tools import DatabaseSchemaTool
 from tools.dependency_analyzer_tools import DependencyAnalyzerTool
+from tools.legacy_php_analysis_tools import LegacyPHPAnalysisTool
 from tools.repository_content_tools import RepositoryContentTool
 from tools.unified_workspace_tools import UnifiedWorkspaceTool
 from utils.config_manager import ConfigManager
@@ -142,6 +143,7 @@ def test_basic_tool_metadata(tmp_path: Path):
         CrossRepoSearchTool(github=github, discovery=discovery),
         DatabaseSchemaTool(),
         DependencyAnalyzerTool(github=github),
+        LegacyPHPAnalysisTool(github=github),
         ConfigTool(config=config),
         AgentContextTool(github=github, config=config),
     ]:
@@ -155,6 +157,7 @@ def test_basic_tool_metadata(tmp_path: Path):
     assert "list_available_configs" in tool_names
     assert "get_database_schema" in tool_names
     assert "build_architecture_analysis" in tool_names
+    assert "analyze_legacy_php_module" in tool_names
 
 
 def test_repo_discovery_respects_policy(tmp_path: Path):
