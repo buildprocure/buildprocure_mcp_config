@@ -281,6 +281,34 @@ def build_architecture_analysis(
 
 
 @mcp.tool()
+def create_architecture_child_tickets(
+    parent_work_item_id: int,
+    repo_name: str,
+    migration_goal: str,
+    target_ref: str = "main",
+    module_name: str | None = None,
+    module_path: str | None = None,
+    work_item_type: str = "User Story",
+    assigned_to: str | None = None,
+    dry_run: bool = True,
+    include_database_schema: bool = True,
+) -> dict[str, Any]:
+    """Suggest or create Azure Boards child tickets from architecture migration evidence."""
+    return service.architecture_agent_tool.create_architecture_child_tickets(
+        parent_work_item_id=parent_work_item_id,
+        repo_name=repo_name,
+        migration_goal=migration_goal,
+        target_ref=target_ref,
+        module_name=module_name,
+        module_path=module_path,
+        work_item_type=work_item_type,
+        assigned_to=assigned_to,
+        dry_run=dry_run,
+        include_database_schema=include_database_schema,
+    )
+
+
+@mcp.tool()
 def analyze_legacy_php_module(
     repo_name: str,
     target_ref: str = "main",

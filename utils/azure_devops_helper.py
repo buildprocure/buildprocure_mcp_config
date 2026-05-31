@@ -29,6 +29,11 @@ class AzureDevOpsHelper:
             "Content-Type": "application/json",
             "Accept": "application/json",
         }
+        self.patch_headers = {
+            "Authorization": f"Basic {token}",
+            "Content-Type": "application/json-patch+json",
+            "Accept": "application/json",
+        }
 
         self.base_url = f"https://dev.azure.com/{self.org}/{self.project}"
 
@@ -101,6 +106,55 @@ class AzureDevOpsHelper:
         data = response.json()
         return [item["id"] for item in data.get("workItems", [])]
 
+    def create_child_work_item(
+        self,
+        parent_work_item_id: int,
+        title: str,
+        description: str = "",
+        acceptance_criteria: str = "",
+        work_item_type: str = "User Story",
+        assigned_to: str | None = None,
+        tags: list[str] | None = None,
+        priority: int | None = None,
+        area_path: str | None = None,
+        iteration_path: str | None = None,
+    ) -> dict[str, Any]:
+        url = (
+            f"{self.base_url}/_apis/wit/workitems/${quote(work_item_type, safe='')}"
+            f"?api-version={self.api_version}"
+        )
+        parent_url = f"{self.base_url}/_apis/wit/workItems/{parent_work_item_id}"
+        patch: list[dict[str, Any]] = [
+            {"op": "add", "path": "/fields/System.Title", "value": title},
+            {"op": "add", "path": "/relations/-", "value": {
+                "rel": "System.LinkTypes.Hierarchy-Reverse",
+                "url": parent_url,
+                "attributes": {"comment": "Created by BuildProcure Architecture Agent"},
+            }},
+        ]
+        if description:
+            patch.append({"op": "add", "path": "/fields/System.Description", "value": description})
+        if acceptance_criteria:
+            patch.append({
+                "op": "add",
+                "path": "/fields/Microsoft.VSTS.Common.AcceptanceCriteria",
+                "value": acceptance_criteria,
+            })
+        if assigned_to:
+            patch.append({"op": "add", "path": "/fields/System.AssignedTo", "value": assigned_to})
+        if tags:
+            patch.append({"op": "add", "path": "/fields/System.Tags", "value": "; ".join(tags)})
+        if priority is not None:
+            patch.append({"op": "add", "path": "/fields/Microsoft.VSTS.Common.Priority", "value": priority})
+        if area_path:
+            patch.append({"op": "add", "path": "/fields/System.AreaPath", "value": area_path})
+        if iteration_path:
+            patch.append({"op": "add", "path": "/fields/System.IterationPath", "value": iteration_path})
+
+        response = requests.post(url, headers=self.patch_headers, json=patch, timeout=30)
+        response.raise_for_status()
+        return self._normalize_work_item_response(response.json())
+
     def get_wiki_page(self, path: str) -> dict[str, Any] | None:
         if not self.wiki_identifier:
             return None
@@ -172,6 +226,20 @@ class AzureDevOpsHelper:
         if isinstance(value, str):
             return value
         return None
+
+    def _normalize_work_item_response(self, data: dict[str, Any]) -> dict[str, Any]:
+        fields = data.get("fields", {})
+        return {
+            "id": data.get("id"),
+            "url": data.get("_links", {}).get("html", {}).get("href"),
+            "type": fields.get("System.WorkItemType"),
+            "title": fields.get("System.Title"),
+            "state": fields.get("System.State"),
+            "assigned_to": self._person_name(fields.get("System.AssignedTo")),
+            "area_path": fields.get("System.AreaPath"),
+            "iteration_path": fields.get("System.IterationPath"),
+            "tags": fields.get("System.Tags"),
+        }
 
     def _summarize_relations(self, relations: list[dict[str, Any]]) -> list[dict[str, Any]]:
         summarized = []
