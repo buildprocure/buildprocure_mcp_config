@@ -52,6 +52,10 @@ class ArchitectureAgentTool:
             {
                 "name": "build_architecture_analysis",
                 "description": "Collect architecture evidence for PHP-to-React migration planning",
+            },
+            {
+                "name": "create_architecture_child_tickets",
+                "description": "Suggest or create Azure Boards child tickets from architecture migration evidence",
             }
         ]
 
@@ -103,6 +107,83 @@ class ArchitectureAgentTool:
             "database_context": database_context,
             "azure_context": azure_context,
             "expected_agent_output": self._expected_agent_output(),
+        }
+
+    def create_architecture_child_tickets(
+        self,
+        parent_work_item_id: int,
+        repo_name: str,
+        migration_goal: str,
+        target_ref: str = "main",
+        module_name: str | None = None,
+        module_path: str | None = None,
+        work_item_type: str = "User Story",
+        assigned_to: str | None = None,
+        dry_run: bool = True,
+        include_database_schema: bool = True,
+    ) -> dict[str, Any]:
+        """Suggest and optionally create child Azure Boards tickets for migration sequencing."""
+        analysis = self.build_architecture_analysis(
+            repo_name=repo_name,
+            target_ref=target_ref,
+            module_path=module_path,
+            work_item_id=parent_work_item_id,
+            include_database_schema=include_database_schema,
+        )
+        suggestions = self._suggest_child_tickets(
+            migration_goal=migration_goal,
+            module_name=module_name,
+            module_path=module_path,
+            architecture_context=analysis.get("architecture_context", {}),
+        )
+
+        created_tickets = []
+        errors = []
+        if not dry_run:
+            parent = analysis.get("azure_context", {}).get("work_item", {})
+            for suggestion in suggestions:
+                try:
+                    created_tickets.append(
+                        self.azure.create_child_work_item(
+                            parent_work_item_id=parent_work_item_id,
+                            title=suggestion["title"],
+                            description=suggestion["description"],
+                            acceptance_criteria=suggestion["acceptance_criteria"],
+                            work_item_type=work_item_type,
+                            assigned_to=assigned_to,
+                            tags=suggestion["tags"],
+                            priority=parent.get("priority"),
+                            area_path=parent.get("area_path"),
+                            iteration_path=parent.get("iteration_path"),
+                        )
+                    )
+                except Exception as exc:
+                    logger.warning("Failed to create architecture child ticket: %s", exc)
+                    errors.append({"title": suggestion["title"], "error": str(exc)})
+
+        return {
+            "ok": bool(analysis.get("ok") and (dry_run or not errors)),
+            "agent": "architecture_agent",
+            "parent_work_item_id": parent_work_item_id,
+            "repo_name": repo_name,
+            "target_ref": target_ref,
+            "module_name": module_name,
+            "module_path": module_path,
+            "migration_goal": migration_goal,
+            "dry_run": dry_run,
+            "work_item_type": work_item_type,
+            "assigned_to": assigned_to,
+            "suggested_ticket_count": len(suggestions),
+            "suggested_tickets": suggestions,
+            "created_ticket_count": len(created_tickets),
+            "created_tickets": created_tickets,
+            "errors": errors,
+            "architecture_summary": {
+                "migration_risks": analysis.get("architecture_context", {}).get("migration_risks", []),
+                "auth_session_hints_count": len(analysis.get("architecture_context", {}).get("auth_session_hints", [])),
+                "sql_usage_hints_count": len(analysis.get("architecture_context", {}).get("sql_usage_hints", [])),
+                "file_upload_hints_count": len(analysis.get("architecture_context", {}).get("file_upload_hints", [])),
+            },
         }
 
     def _scope_tree(self, tree: list[str], module_path: str | None) -> list[str]:
@@ -227,6 +308,131 @@ class ArchitectureAgentTool:
         if any(path.lower().endswith(".php") for path in tree) and not any("composer.json" in path for path in tree):
             risks.append("Legacy PHP dependency boundaries may be implicit because composer.json was not found.")
         return risks
+
+    def _suggest_child_tickets(
+        self,
+        migration_goal: str,
+        module_name: str | None,
+        module_path: str | None,
+        architecture_context: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        label = module_name or module_path or migration_goal
+        tickets = []
+        risks = architecture_context.get("migration_risks", [])
+        role_module = any(role in label.lower() for role in ("buyer", "supplier", "admin"))
+        auth_needed = (
+            role_module
+            or bool(architecture_context.get("auth_session_hints"))
+            or any("Session-based" in risk for risk in risks)
+        )
+        api_needed = bool(architecture_context.get("sql_usage_hints")) or bool(architecture_context.get("database_tables"))
+        upload_needed = bool(architecture_context.get("file_upload_hints")) or any("upload" in risk.lower() for risk in risks)
+
+        if auth_needed:
+            tickets.append(
+                self._ticket_suggestion(
+                    title=f"Implement React auth/session bridge for {label}",
+                    purpose="Remove the session/auth blocker before migrating protected React screens.",
+                    affected=["login.php", "logout.php", "session_check.php", "app/Core/Auth.php", "_config.php"],
+                    endpoints=["GET /api/auth/session", "POST /api/auth/login", "POST /api/auth/logout"],
+                    acceptance=[
+                        "React can check current logged-in user and role without rendering protected pages blindly.",
+                        "Buyer role is available to migrated Buyer module screens through an auth context.",
+                        "Existing PHP session behavior remains compatible during incremental migration.",
+                    ],
+                    tags=["architecture", "auth", "migration"],
+                )
+            )
+
+        if api_needed:
+            tickets.append(
+                self._ticket_suggestion(
+                    title=f"Implement backend API bridge for {label}",
+                    purpose="Expose legacy PHP/database behavior through JSON endpoints consumed by React.",
+                    affected=[module_path or "legacy PHP module", "api/legacy", "database model tables"],
+                    endpoints=["GET/POST module-specific /api/legacy/... endpoints"],
+                    acceptance=[
+                        "React can load module data through JSON without scraping legacy PHP pages.",
+                        "API responses use consistent ok/data/error shapes.",
+                        "Protected endpoints enforce the migrated auth/session contract.",
+                    ],
+                    tags=["architecture", "api", "migration"],
+                )
+            )
+
+        tickets.append(
+            self._ticket_suggestion(
+                title=f"Create migration spec for {label}",
+                purpose="Lock scope, source files, routes, data contracts, and risks before code conversion.",
+                affected=[module_path or "selected migration module"],
+                endpoints=[],
+                acceptance=[
+                    "Spec lists source PHP files, React routes/components, API contracts, database tables, and risks.",
+                    "Spec identifies what is in scope and what is explicitly deferred.",
+                    "Spec can be consumed by React conversion and code writer agents.",
+                ],
+                tags=["architecture", "spec", "migration"],
+            )
+        )
+
+        tickets.append(
+            self._ticket_suggestion(
+                title=f"Convert {label} UI to React",
+                purpose="Generate and refine React components, hooks, and routes for the migration slice.",
+                affected=["procurex-react/src"],
+                endpoints=[],
+                acceptance=[
+                    "React screen renders the migrated workflow using the migration spec.",
+                    "UI calls the backend API bridge and handles loading, empty, error, and unauthorized states.",
+                    "Generated code stays local until tested.",
+                ],
+                tags=["architecture", "react", "migration"],
+            )
+        )
+
+        if upload_needed:
+            tickets.append(
+                self._ticket_suggestion(
+                    title=f"Define file upload contract for {label}",
+                    purpose="Preserve legacy upload behavior through explicit multipart API and storage rules.",
+                    affected=[module_path or "legacy PHP upload files", "storage/files"],
+                    endpoints=["POST module-specific multipart upload endpoint"],
+                    acceptance=[
+                        "Allowed file types, size limits, storage path, and validation behavior are documented.",
+                        "React upload flow receives structured success/error responses.",
+                        "Legacy storage compatibility is preserved or migration differences are documented.",
+                    ],
+                    tags=["architecture", "upload", "migration"],
+                )
+            )
+
+        return tickets
+
+    def _ticket_suggestion(
+        self,
+        title: str,
+        purpose: str,
+        affected: list[str],
+        endpoints: list[str],
+        acceptance: list[str],
+        tags: list[str],
+    ) -> dict[str, Any]:
+        description_lines = [
+            f"Purpose: {purpose}",
+            "",
+            "Affected files/modules:",
+            *[f"- {item}" for item in affected],
+        ]
+        if endpoints:
+            description_lines.extend(["", "Expected API endpoints:", *[f"- {endpoint}" for endpoint in endpoints]])
+        return {
+            "title": title,
+            "description": "\n".join(description_lines),
+            "acceptance_criteria": "\n".join(f"- {item}" for item in acceptance),
+            "tags": tags,
+            "assigned_to": None,
+            "recommended_owner": "Architecture Agent creates the ticket; implementation agents execute it.",
+        }
 
     def _get_database_context(self, include_database_schema: bool) -> dict[str, Any]:
         if not include_database_schema:

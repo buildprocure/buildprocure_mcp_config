@@ -64,8 +64,28 @@ class FakeDatabaseSchemaTool:
 
 
 class FakeAzure:
+    def __init__(self) -> None:
+        self.created = []
+
     def get_work_item(self, work_item_id: int) -> dict:
-        return {"id": work_item_id, "type": "Feature", "title": "Architecture Agent"}
+        return {
+            "id": work_item_id,
+            "type": "Feature",
+            "title": "Architecture Agent",
+            "priority": 2,
+            "area_path": "BuildProcure",
+            "iteration_path": "BuildProcure\\Sprint 1",
+        }
+
+    def create_child_work_item(self, **kwargs) -> dict:
+        self.created.append(kwargs)
+        return {
+            "id": 100 + len(self.created),
+            "type": kwargs["work_item_type"],
+            "title": kwargs["title"],
+            "assigned_to": kwargs.get("assigned_to"),
+            "url": f"https://example.test/{100 + len(self.created)}",
+        }
 
 
 def _tool() -> ArchitectureAgentTool:
@@ -80,7 +100,7 @@ def _tool() -> ArchitectureAgentTool:
 def test_architecture_agent_metadata():
     names = [tool["name"] for tool in _tool().get_tools()]
 
-    assert names == ["build_architecture_analysis"]
+    assert names == ["build_architecture_analysis", "create_architecture_child_tickets"]
 
 
 def test_build_architecture_analysis_collects_migration_evidence():
@@ -105,3 +125,48 @@ def test_build_architecture_analysis_can_skip_database_schema():
 
     assert result["database_context"] == {"enabled": False, "tables": []}
     assert result["architecture_context"]["database_tables"] == []
+
+
+def test_create_architecture_child_tickets_dry_run_suggests_without_creating():
+    tool = _tool()
+    result = tool.create_architecture_child_tickets(
+        parent_work_item_id=47,
+        repo_name="procurex",
+        migration_goal="Migrate Buyer BOQ to React",
+        module_name="Buyer BOQ",
+        module_path="Buyer",
+        dry_run=True,
+    )
+
+    assert result["ok"] is True
+    assert result["dry_run"] is True
+    assert result["created_tickets"] == []
+    assert result["suggested_ticket_count"] >= 3
+    assert any("auth/session bridge" in ticket["title"] for ticket in result["suggested_tickets"])
+    assert any("backend API bridge" in ticket["title"] for ticket in result["suggested_tickets"])
+
+
+def test_create_architecture_child_tickets_creates_when_dry_run_false():
+    azure = FakeAzure()
+    tool = ArchitectureAgentTool(
+        agent_context_tool=FakeAgentContextTool(),
+        content_tool=FakeContentTool(),
+        database_schema_tool=FakeDatabaseSchemaTool(),
+        azure=azure,
+    )
+
+    result = tool.create_architecture_child_tickets(
+        parent_work_item_id=47,
+        repo_name="procurex",
+        migration_goal="Migrate Buyer BOQ to React",
+        module_name="Buyer BOQ",
+        module_path="Buyer",
+        assigned_to="rabin@example.test",
+        dry_run=False,
+    )
+
+    assert result["ok"] is True
+    assert result["created_ticket_count"] == result["suggested_ticket_count"]
+    assert azure.created
+    assert azure.created[0]["parent_work_item_id"] == 47
+    assert azure.created[0]["assigned_to"] == "rabin@example.test"
