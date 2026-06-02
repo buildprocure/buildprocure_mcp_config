@@ -170,6 +170,7 @@ def test_basic_tool_metadata(tmp_path: Path):
     assert "get_database_schema" in tool_names
     assert "build_database_model_context" in tool_names
     assert "build_architecture_analysis" in tool_names
+    assert "create_architecture_child_tickets" in tool_names
     assert "analyze_legacy_php_module" in tool_names
     assert "run_migration_request" in tool_names
     assert "build_migration_spec" in tool_names
