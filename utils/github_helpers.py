@@ -60,20 +60,52 @@ class GitHubHelper:
         }
 
     def get_user_repos(self) -> list[dict[str, Any]]:
-        """Fetch all repositories visible to the configured token/user."""
+        """Fetch repositories visible to the configured identity and owner/org."""
+        repos_by_full_name: dict[str, dict[str, Any]] = {}
         if self.token:
-            url = f"{self.base_url}/user/repos"
-            params = {"per_page": 100, "type": "all", "sort": "updated"}
-        else:
-            url = f"{self.base_url}/users/{self.user}/repos"
-            params = {"per_page": 100, "type": "all", "sort": "updated"}
+            for repo in self._fetch_paginated_repos(
+                f"{self.base_url}/user/repos",
+                {"per_page": 100, "type": "all", "sort": "updated"},
+                "authenticated user repositories",
+            ):
+                repos_by_full_name[repo.get("full_name") or repo.get("name") or ""] = repo
 
+        for repo in self._fetch_paginated_repos(
+            f"{self.base_url}/orgs/{self.user}/repos",
+            {"per_page": 100, "type": "all", "sort": "updated"},
+            f"{self.user} organization repositories",
+            missing_ok=True,
+        ):
+            repos_by_full_name[repo.get("full_name") or repo.get("name") or ""] = repo
+
+        if not repos_by_full_name and not self.token:
+            for repo in self._fetch_paginated_repos(
+                f"{self.base_url}/users/{self.user}/repos",
+                {"per_page": 100, "type": "all", "sort": "updated"},
+                f"{self.user} user repositories",
+            ):
+                repos_by_full_name[repo.get("full_name") or repo.get("name") or ""] = repo
+
+        repos = [repo for key, repo in repos_by_full_name.items() if key]
+        logger.info("Fetched %s repositories for %s", len(repos), self.user)
+        return repos
+
+    def _fetch_paginated_repos(
+        self,
+        url: str,
+        params: dict[str, Any],
+        label: str,
+        missing_ok: bool = False,
+    ) -> list[dict[str, Any]]:
         repos: list[dict[str, Any]] = []
         page = 1
         while True:
             response = self._request("GET", url, params={**params, "page": page})
+            if response.status_code == 404 and missing_ok:
+                logger.info("Repository source not found for %s", label)
+                return repos
             if response.status_code != 200:
-                logger.error("Failed to fetch repos: %s %s", response.status_code, response.text)
+                logger.error("Failed to fetch %s: %s %s", label, response.status_code, response.text)
                 return repos
 
             batch = response.json()
@@ -82,7 +114,7 @@ class GitHubHelper:
                 break
             page += 1
 
-        logger.info("Fetched %s repositories for %s", len(repos), self.user)
+        logger.info("Fetched %s repositories from %s", len(repos), label)
         return repos
 
     def get_repo_details(self, repo_name: str) -> dict[str, Any] | None:
