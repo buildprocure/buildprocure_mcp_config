@@ -4,8 +4,12 @@ services:
     container_name: buildprocure-mcp
     env_file:
       - .env
+    environment:
+      MCP_TOOL_LOG_FILE: /app/logs/tool-execution.jsonl
     ports:
       - "3011:80"
+    volumes:
+      - ./logs:/app/logs
     networks:
       - app-network
     restart: always

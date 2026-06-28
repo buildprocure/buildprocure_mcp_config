@@ -32,6 +32,7 @@ from tools.unified_workspace_tools import UnifiedWorkspaceTool
 from utils.config_manager import ConfigManager
 from utils.github_helpers import GitHubHelper
 from utils.repo_discovery import RepositoryDiscovery
+from utils.tool_execution_logger import logged_tool
 
 load_dotenv()
 
@@ -122,48 +123,56 @@ service = BuildProcureService()
 
 
 @mcp.tool()
+@logged_tool("list_all_repos")
 def list_all_repos(include_archived: bool = False) -> dict[str, Any]:
     """List BuildProcure repositories that match discovery policy."""
     return service.workspace_tool.list_all_repos(include_archived=include_archived)
 
 
 @mcp.tool()
+@logged_tool("get_repo_info")
 def get_repo_info(repo_name: str) -> dict[str, Any]:
     """Get normalized information about a BuildProcure repository."""
     return service.workspace_tool.get_repo_info(repo_name)
 
 
 @mcp.tool()
+@logged_tool("get_repo_tree")
 def get_repo_tree(repo_name: str, target_ref: str = "main") -> dict[str, Any]:
     """Get a repository file tree for a branch, tag, or commit ref."""
     return service.content_tool.get_repo_tree(repo_name, target_ref=target_ref)
 
 
 @mcp.tool()
+@logged_tool("get_repo_file")
 def get_repo_file(repo_name: str, path: str, target_ref: str = "main") -> dict[str, Any]:
     """Get one repository file by path and ref."""
     return service.content_tool.get_repo_file(repo_name, path, target_ref=target_ref)
 
 
 @mcp.tool()
+@logged_tool("get_repo_files_batch")
 def get_repo_files_batch(repo_name: str, paths: list[str], target_ref: str = "main") -> dict[str, Any]:
     """Get multiple repository files by path and ref."""
     return service.content_tool.get_repo_files_batch(repo_name, paths, target_ref=target_ref)
 
 
 @mcp.tool()
+@logged_tool("get_repo_manifest_summary")
 def get_repo_manifest_summary(repo_name: str, target_ref: str = "main") -> dict[str, Any]:
     """Detect repository manifests, stack hints, scripts, tests, and deployment hints."""
     return service.dep_tool.get_repo_manifest_summary(repo_name, target_ref=target_ref)
 
 
 @mcp.tool()
+@logged_tool("analyze_dependencies")
 def analyze_dependencies(repo_name: str, target_ref: str = "main") -> dict[str, Any]:
     """Alias for get_repo_manifest_summary."""
     return service.dep_tool.analyze_dependencies(repo_name, target_ref=target_ref)
 
 
 @mcp.tool()
+@logged_tool("search_across_repos")
 def search_across_repos(
     query: str,
     include_archived: bool = False,
@@ -178,18 +187,21 @@ def search_across_repos(
 
 
 @mcp.tool()
+@logged_tool("list_available_configs")
 def list_available_configs() -> dict[str, Any]:
     """List available YAML configs and readable load errors."""
     return service.config_tool.list_available_configs()
 
 
 @mcp.tool()
+@logged_tool("get_config")
 def get_config(config_name: str) -> dict[str, Any]:
     """Get one loaded config by name."""
     return service.config_tool.get_config(config_name)
 
 
 @mcp.tool()
+@logged_tool("build_agent_context")
 def build_agent_context(
     repo_name: str,
     target_ref: str = "main",
@@ -204,18 +216,21 @@ def build_agent_context(
 
 
 @mcp.tool()
+@logged_tool("test_database_connection")
 def test_database_connection() -> dict[str, Any]:
     """Check whether the configured MySQL schema connection works."""
     return service.database_schema_tool.test_database_connection()
 
 
 @mcp.tool()
+@logged_tool("list_database_tables")
 def list_database_tables(schema_name: str | None = None) -> dict[str, Any]:
     """List tables and views from the configured MySQL database."""
     return service.database_schema_tool.list_database_tables(schema_name=schema_name)
 
 
 @mcp.tool()
+@logged_tool("describe_database_table")
 def describe_database_table(table_name: str, schema_name: str | None = None) -> dict[str, Any]:
     """Describe columns, indexes, and foreign keys for one MySQL table."""
     return service.database_schema_tool.describe_database_table(
@@ -225,6 +240,7 @@ def describe_database_table(table_name: str, schema_name: str | None = None) -> 
 
 
 @mcp.tool()
+@logged_tool("get_database_schema")
 def get_database_schema(
     schema_name: str | None = None,
     include_columns: bool = True,
@@ -239,6 +255,7 @@ def get_database_schema(
 
 
 @mcp.tool()
+@logged_tool("build_database_model_context")
 def build_database_model_context(
     schema_name: str | None = None,
     table_names: list[str] | None = None,
@@ -257,6 +274,7 @@ def build_database_model_context(
 
 
 @mcp.tool()
+@logged_tool("build_architecture_analysis")
 def build_architecture_analysis(
     repo_name: str,
     target_ref: str = "main",
@@ -275,6 +293,7 @@ def build_architecture_analysis(
 
 
 @mcp.tool()
+@logged_tool("create_architecture_child_tickets")
 def create_architecture_child_tickets(
     parent_work_item_id: int,
     repo_name: str,
@@ -303,6 +322,7 @@ def create_architecture_child_tickets(
 
 
 @mcp.tool()
+@logged_tool("analyze_legacy_php_module")
 def analyze_legacy_php_module(
     repo_name: str,
     target_ref: str = "main",
@@ -323,6 +343,7 @@ def analyze_legacy_php_module(
 
 
 @mcp.tool()
+@logged_tool("build_migration_spec")
 def build_migration_spec(
     repo_name: str,
     module_name: str,
@@ -351,6 +372,7 @@ def build_migration_spec(
 
 
 @mcp.tool()
+@logged_tool("build_react_conversion_plan")
 def build_react_conversion_plan(
     repo_name: str,
     module_name: str,
@@ -381,6 +403,7 @@ def build_react_conversion_plan(
 
 
 @mcp.tool()
+@logged_tool("write_react_conversion_files")
 def write_react_conversion_files(
     source_repo_name: str,
     target_repo_name: str,
@@ -421,6 +444,7 @@ def write_react_conversion_files(
 
 
 @mcp.tool()
+@logged_tool("run_migration_request")
 def run_migration_request(
     request_text: str,
     source_repo_name: str,
@@ -463,6 +487,7 @@ def run_migration_request(
 
 
 @mcp.tool()
+@logged_tool("generate_backend_api_bridge_files")
 def generate_backend_api_bridge_files(
     repo_name: str,
     module_name: str,
@@ -493,18 +518,21 @@ def generate_backend_api_bridge_files(
 
 
 @mcp.tool()
+@logged_tool("list_open_pull_requests")
 def list_open_pull_requests(repo_name: str) -> dict[str, Any]:
     """List open pull requests for a repository."""
     return service.pr_review_tool.list_open_pull_requests(repo_name)
 
 
 @mcp.tool()
+@logged_tool("get_pull_request_details")
 def get_pull_request_details(repo_name: str, pr_number: int) -> dict[str, Any]:
     """Get pull request metadata and changed files."""
     return service.pr_review_tool.get_pull_request_details(repo_name, pr_number)
 
 
 @mcp.tool()
+@logged_tool("get_pr_review_context")
 def get_pr_review_context(
     repo_name: str,
     pr_number: int,
